@@ -1,13 +1,15 @@
 // src/pages/CadastroImovel.jsx
 
 import { useState } from 'react';
-// IMPORTANTE: Importar as funções do Firestore e a nossa config do db
 import { db } from '../services/firebaseConfig';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+// 1. Importe o nosso hook de autenticação para saber quem está logado
+import { useAuth } from '../contexts/AuthContext';
 
 function CadastroImovel() {
-  // O useState vai guardar os dados de TODOS os campos do formulário
-  // A estrutura dele é um espelho do nosso modelo de dados
+  // 2. Pegue o usuário atual do contexto
+  const { currentUser } = useAuth();
+  
   const [imovelData, setImovelData] = useState({
     titulo: '',
     descricao: '',
@@ -60,7 +62,11 @@ function CadastroImovel() {
   const handleSubmit = async (e) => {
     e.preventDefault(); // Impede que a página recarregue
     
-    console.log("Dados a serem enviados:", imovelData);
+    // 3. Verificação de segurança: só permite o cadastro se houver um usuário logado
+    if (!currentUser) {
+      alert("Você precisa estar logado para cadastrar um imóvel.");
+      return;
+    }
 
     try {
       // Usamos a função addDoc para adicionar um novo documento
@@ -75,11 +81,19 @@ function CadastroImovel() {
           vagasGaragem: Number(imovelData.caracteristicas.vagasGaragem),
           areaTotal: Number(imovelData.caracteristicas.areaTotal),
         },
-        createdAt: serverTimestamp() // Adiciona a data de criação pelo servidor
+        createdAt: serverTimestamp(), // Adiciona a data de criação pelo servidor
+        // 4. A MÁGICA ACONTECE AQUI: Adicionamos o ID do corretor logado ao imóvel!
+        corretorId: currentUser.uid 
       });
       
-      alert(`Imóvel cadastrado com sucesso! ID: ${docRef.id}`);
-      // Futuramente, podemos limpar o formulário ou redirecionar o usuário
+      alert(`Imóvel cadastrado com sucesso!`);
+      // Limpa o formulário após o sucesso
+      setImovelData({
+        titulo: '', descricao: '', tipo: 'casa', finalidade: 'venda', preco: 0, status: 'disponivel',
+        endereco: { rua: '', numero: '', bairro: '', cidade: '', cep: '' },
+        caracteristicas: { quartos: 0, suites: 0, banheiros: 0, vagasGaragem: 0, areaTotal: 0 },
+        comodidades: [], fotos: []
+      });
       
     } catch (error) {
       console.error("Erro ao cadastrar imóvel: ", error);

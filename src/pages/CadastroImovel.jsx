@@ -1,6 +1,7 @@
 // src/pages/CadastroImovel.jsx
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { db } from '../services/firebaseConfig';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,11 +21,17 @@ function CadastroImovel() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  
-  // A variável que faltava e causou a tela branca.
   const [formSuccess, setFormSuccess] = useState(false); 
 
+  const [whatsapp, setWhatsapp] = useState('');
+  const [logoFile, setLogoFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
+    if (currentUser && currentUser.personalizacao) {
+      setWhatsapp(currentUser.personalizacao.whatsapp || '');
+    }
+    
     const fetchMeusImoveis = async () => {
       if (!currentUser) return;
       setLoading(true);
@@ -125,10 +132,115 @@ function CadastroImovel() {
     }
   };
 
+  const handlePersonalizacaoSubmit = async (e) => {
+    e.preventDefault();
+    if (!currentUser) {
+      alert("Você precisa estar logado para salvar.");
+      return;
+    }
+    setUploading(true);
+
+    try {
+      let logoUrl = currentUser.personalizacao?.logoUrl || '';
+
+      if (logoFile) {
+        const formData = new FormData();
+        formData.append('file', logoFile);
+        formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+
+        const data = await response.json();
+        if (data.secure_url) {
+          logoUrl = data.secure_url;
+        } else {
+          throw new Error('Falha no upload para o Cloudinary.');
+        }
+      }
+
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        personalizacao: {
+          whatsapp: whatsapp,
+          logoUrl: logoUrl
+        }
+      }, { merge: true });
+
+      alert("Personalização salva com sucesso! Pode ser necessário recarregar a página para que as alterações tenham efeito no seu perfil.");
+      setLogoFile(null);
+
+    } catch (error) {
+      console.error("Erro ao salvar personalização: ", error);
+      alert("Ocorreu um erro ao salvar a personalização.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div>
+      <h1>Painel do Corretor</h1>
+
+      {currentUser && (
+        <div style={{ margin: '20px 0', padding: '10px', border: '1px solid green', backgroundColor: '#f0fff0' }}>
+          <p style={{ margin: 0, fontWeight: 'bold' }}>Link da sua Vitrine Pessoal:</p>
+          <Link to={`/corretor/${currentUser.uid}`} target="_blank" rel="noopener noreferrer">
+            https://imobiconnect.netlify.app/corretor/{currentUser.uid}
+          </Link>
+        </div>
+      )}
+
+      <section style={{ margin: '40px 0' }}>
+        <h2>Personalização da sua Página</h2>
+
+        {/* ===== CÓDIGO PARA EXIBIR A LOGO NO PAINEL ===== */}
+        {currentUser?.personalizacao?.logoUrl && (
+            <div style={{ marginBottom: '20px' }}>
+                <p>Sua logo atual:</p>
+                <img 
+                    src={currentUser.personalizacao.logoUrl} 
+                    alt="Sua logo atual"
+                    style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+            </div>
+        )}
+        {/* ================================================= */}
+
+        <form onSubmit={handlePersonalizacaoSubmit}>
+          <fieldset>
+            <legend>Suas Informações Públicas</legend>
+            <label>Número do WhatsApp (com código do país, ex: 5579...):
+              <input 
+                type="tel" 
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="5579999998888"
+              />
+            </label>
+            <br/><br/>
+            <label>Alterar Logo (imagem):
+              <input 
+                type="file" 
+                accept="image/png, image/jpeg"
+                onChange={(e) => setLogoFile(e.target.files[0])}
+              />
+            </label>
+          </fieldset>
+          <button type="submit" disabled={uploading}>
+            {uploading ? 'Salvando...' : 'Salvar Personalização'}
+          </button>
+        </form>
+      </section>
+
+      <hr style={{ margin: '40px 0' }} />
+
       <section>
-        <h1>Painel do Corretor</h1>
         <h2>{isEditing ? 'Editando Imóvel' : 'Cadastrar Novo Imóvel'}</h2>
         <form onSubmit={handleSubmit}>
             <fieldset>

@@ -6,6 +6,7 @@ import CadastroImovel from './pages/CadastroImovel';
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import SuperAdmin from './pages/SuperAdmin';
+import PaginaCorretor from './pages/PaginaCorretor'
 
 // 1. Importe as ferramentas que precisamos
 import { useAuth } from './contexts/AuthContext';
@@ -51,7 +52,7 @@ function App() {
         {/* Rotas Públicas */}
         <Route path="/" element={<ListaImoveis />} />
         <Route path="/login" element={<Login />} />
-        
+        <Route path="/corretor/:corretorId" element={<PaginaCorretor />} />
         {/* Rotas Protegidas com PAPÉIS ESPECÍFICOS */}
         <Route 
           path="/admin" 

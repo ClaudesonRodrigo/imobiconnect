@@ -16,7 +16,6 @@ export function AuthProvider({ children }) {
       if (user) {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
-
         if (userDocSnap.exists()) {
           setCurrentUser({ ...user, ...userDocSnap.data() });
         } else {
@@ -27,18 +26,16 @@ export function AuthProvider({ children }) {
       }
       setLoading(false);
     });
-
     return unsubscribe;
   }, []);
 
-  // ATUALIZAÇÃO AQUI
+  // ATUALIZAÇÃO: Exportando também o estado 'loading'
   const value = {
     currentUser,
-    loading // Exportando o estado de carregamento
+    loading
   };
 
-  // ATUALIZAÇÃO AQUI
-  // A lógica de espera será feita no ProtectedRoute
+  // ATUALIZAÇÃO: Removendo a condição de !loading daqui
   return (
     <AuthContext.Provider value={value}>
       {children}

@@ -1,114 +1,127 @@
 // src/pages/CadastroImovel.jsx
 
-import { useState, useEffect } from 'react'; // Adicionado useEffect
+import { useState, useEffect } from 'react';
 import { db } from '../services/firebaseConfig';
-// Adicionadas as funções para fazer a query (consulta)
-import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
+
+const initialState = {
+  titulo: '', descricao: '', tipo: 'casa', finalidade: 'venda', preco: 0, status: 'disponivel',
+  endereco: { rua: '', numero: '', bairro: '', cidade: '', cep: '' },
+  caracteristicas: { quartos: 0, suites: 0, banheiros: 0, vagasGaragem: 0, areaTotal: 0 },
+  comodidades: [], fotos: []
+};
 
 function CadastroImovel() {
   const { currentUser } = useAuth();
   
-  const [imovelData, setImovelData] = useState({
-    titulo: '',
-    descricao: '',
-    tipo: 'casa',
-    finalidade: 'venda',
-    preco: 0,
-    status: 'disponivel',
-    endereco: { rua: '', numero: '', bairro: '', cidade: '', cep: '' },
-    caracteristicas: { quartos: 0, suites: 0, banheiros: 0, vagasGaragem: 0, areaTotal: 0 },
-    comodidades: [],
-    fotos: []
-  });
-
-  // States para a lista de imóveis pessoais
+  const [imovelData, setImovelData] = useState(initialState);
   const [meusImoveis, setMeusImoveis] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [formSuccess, setFormSuccess] = useState(false); // State para saber quando recarregar a lista
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  
+  // A variável que faltava e causou a tela branca.
+  const [formSuccess, setFormSuccess] = useState(false); 
 
-  // useEffect para buscar os imóveis do corretor logado
   useEffect(() => {
     const fetchMeusImoveis = async () => {
-      if (!currentUser) return; // Se não houver usuário, não faz nada
-
-      setLoading(true); // Começa a carregar
+      if (!currentUser) return;
+      setLoading(true);
       try {
         const imoveisCollectionRef = collection(db, 'imoveis');
-        // A QUERY MÁGICA: busca imóveis onde o corretorId é igual ao UID do usuário logado
-        const q = query(
-          imoveisCollectionRef, 
-          where("corretorId", "==", currentUser.uid),
-          orderBy("createdAt", "desc") // Opcional: ordena pelos mais recentes
-        );
-
+        const q = query(imoveisCollectionRef, where("corretorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
-        const imoveisList = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
+        const imoveisList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setMeusImoveis(imoveisList);
       } catch (err) {
         console.error("Erro ao buscar meus imóveis:", err);
       } finally {
-        setLoading(false); // Termina de carregar
+        setLoading(false);
       }
     };
-
     fetchMeusImoveis();
-  }, [currentUser, formSuccess]); // Roda quando o usuário muda OU quando um novo imóvel é cadastrado
+  }, [currentUser, formSuccess]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name.includes('.')) {
       const [objectName, fieldName] = name.split('.');
-      setImovelData(prevData => ({
-        ...prevData,
-        [objectName]: {
-          ...prevData[objectName],
-          [fieldName]: value
-        }
-      }));
+      setImovelData(prevData => ({ ...prevData, [objectName]: { ...prevData[objectName], [fieldName]: value } }));
     } else {
-      setImovelData(prevData => ({
-        ...prevData,
-        [name]: value
-      }));
+      setImovelData(prevData => ({ ...prevData, [name]: value }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!currentUser) {
-      alert("Você precisa estar logado para cadastrar um imóvel.");
+      alert("Você precisa estar logado.");
       return;
     }
-    try {
-      await addDoc(collection(db, "imoveis"), {
-        ...imovelData,
-        preco: Number(imovelData.preco),
-        caracteristicas: {
-          quartos: Number(imovelData.caracteristicas.quartos),
-          suites: Number(imovelData.caracteristicas.suites),
-          banheiros: Number(imovelData.caracteristicas.banheiros),
-          vagasGaragem: Number(imovelData.caracteristicas.vagasGaragem),
-          areaTotal: Number(imovelData.caracteristicas.areaTotal),
-        },
-        createdAt: serverTimestamp(),
-        corretorId: currentUser.uid 
-      });
-      alert(`Imóvel cadastrado com sucesso!`);
-      setImovelData({
-        titulo: '', descricao: '', tipo: 'casa', finalidade: 'venda', preco: 0, status: 'disponivel',
-        endereco: { rua: '', numero: '', bairro: '', cidade: '', cep: '' },
-        caracteristicas: { quartos: 0, suites: 0, banheiros: 0, vagasGaragem: 0, areaTotal: 0 },
-        comodidades: [], fotos: []
-      });
-      setFormSuccess(!formSuccess); // "Avisa" o useEffect para recarregar a lista
-    } catch (error) {
-      console.error("Erro ao cadastrar imóvel: ", error);
-      alert("Ocorreu um erro ao cadastrar o imóvel. Verifique o console.");
+    const dataToSave = {
+      ...imovelData,
+      preco: Number(imovelData.preco),
+      caracteristicas: {
+        quartos: Number(imovelData.caracteristicas.quartos),
+        suites: Number(imovelData.caracteristicas.suites),
+        banheiros: Number(imovelData.caracteristicas.banheiros),
+        vagasGaragem: Number(imovelData.caracteristicas.vagasGaragem),
+        areaTotal: Number(imovelData.caracteristicas.areaTotal),
+      },
+    };
+
+    if (isEditing) {
+      try {
+        const imovelDocRef = doc(db, 'imoveis', editingId);
+        await updateDoc(imovelDocRef, dataToSave);
+        alert("Imóvel atualizado com sucesso!");
+        handleCancelEdit();
+        setFormSuccess(!formSuccess);
+      } catch (error) {
+        console.error("Erro ao atualizar imóvel: ", error);
+        alert("Ocorreu um erro ao atualizar.");
+      }
+    } else {
+      try {
+        await addDoc(collection(db, "imoveis"), {
+          ...dataToSave,
+          createdAt: serverTimestamp(),
+          corretorId: currentUser.uid 
+        });
+        alert(`Imóvel cadastrado com sucesso!`);
+        setImovelData(initialState);
+        setFormSuccess(!formSuccess);
+      } catch (error) {
+        console.error("Erro ao cadastrar imóvel: ", error);
+        alert("Ocorreu um erro ao cadastrar.");
+      }
+    }
+  };
+
+  const handleEdit = (imovel) => {
+    setIsEditing(true);
+    setEditingId(imovel.id);
+    setImovelData(imovel);
+    window.scrollTo(0, 0);
+  };
+  
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditingId(null);
+    setImovelData(initialState);
+  };
+
+  const handleDelete = async (imovelId) => {
+    if (window.confirm("Tem certeza que deseja apagar este imóvel?")) {
+      try {
+        await deleteDoc(doc(db, 'imoveis', imovelId));
+        alert("Imóvel apagado com sucesso!");
+        setFormSuccess(!formSuccess);
+      } catch (error) {
+        console.error("Erro ao apagar imóvel: ", error);
+        alert("Ocorreu um erro ao apagar.");
+      }
     }
   };
 
@@ -116,7 +129,7 @@ function CadastroImovel() {
     <div>
       <section>
         <h1>Painel do Corretor</h1>
-        <h2>Cadastrar Novo Imóvel</h2>
+        <h2>{isEditing ? 'Editando Imóvel' : 'Cadastrar Novo Imóvel'}</h2>
         <form onSubmit={handleSubmit}>
             <fieldset>
                 <legend>Informações Principais</legend>
@@ -153,7 +166,12 @@ function CadastroImovel() {
                 <label>Vagas de Garagem: <input type="number" name="caracteristicas.vagasGaragem" value={imovelData.caracteristicas.vagasGaragem} onChange={handleChange} /></label><br/>
                 <label>Área Total (m²): <input type="number" name="caracteristicas.areaTotal" value={imovelData.caracteristicas.areaTotal} onChange={handleChange} /></label><br/>
             </fieldset>
-            <button type="submit">Cadastrar Imóvel</button>
+            <button type="submit">{isEditing ? 'Atualizar Imóvel' : 'Cadastrar Imóvel'}</button>
+            {isEditing && (
+                <button type="button" onClick={handleCancelEdit} style={{ marginLeft: '10px', backgroundColor: 'gray' }}>
+                Cancelar Edição
+                </button>
+            )}
         </form>
       </section>
 
@@ -161,21 +179,22 @@ function CadastroImovel() {
 
       <section>
         <h2>Meus Imóveis Cadastrados</h2>
-        {loading ? (
-          <p>Carregando seus imóveis...</p>
-        ) : (
+        {loading ? <p>Carregando...</p> : (
           <div>
-            {meusImoveis.length > 0 ? (
-              meusImoveis.map(imovel => (
-                <div key={imovel.id} style={{ border: '1px solid #555', padding: '10px', marginBottom: '10px', textAlign: 'left' }}>
-                  <h3>{imovel.titulo}</h3>
-                  <p><strong>Cidade:</strong> {imovel.endereco.cidade}</p>
-                  <p><strong>Preço:</strong> R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
+            {meusImoveis.length === 0 ? <p>Você ainda não cadastrou nenhum imóvel.</p> : meusImoveis.map(imovel => (
+              <div key={imovel.id} style={{ border: '1px solid #555', padding: '10px', marginBottom: '10px', textAlign: 'left' }}>
+                <h3>{imovel.titulo}</h3>
+                <p><strong>Preço:</strong> R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
+                <div>
+                  <button onClick={() => handleEdit(imovel)} style={{ backgroundColor: 'darkblue', color: 'white', marginRight: '10px' }}>
+                    Editar
+                  </button>
+                  <button onClick={() => handleDelete(imovel.id)} style={{ backgroundColor: 'darkred', color: 'white' }}>
+                    Apagar
+                  </button>
                 </div>
-              ))
-            ) : (
-              <p>Você ainda não cadastrou nenhum imóvel.</p>
-            )}
+              </div>
+            ))}
           </div>
         )}
       </section>

@@ -3,7 +3,7 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore'; // Importe o getDoc
+import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -14,19 +14,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Se um usuário fez login, busque o documento dele no Firestore
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
-          // Se o documento existe, salve o usuário COM O PAPEL no nosso state
           setCurrentUser({ ...user, ...userDocSnap.data() });
         } else {
-          // Caso raro: usuário existe no Auth mas não no Firestore. Trate como não logado.
           setCurrentUser(null);
         }
       } else {
-        // Se não há usuário, defina como nulo
         setCurrentUser(null);
       }
       setLoading(false);
@@ -35,13 +31,17 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  // ATUALIZAÇÃO AQUI
   const value = {
-    currentUser
+    currentUser,
+    loading // Exportando o estado de carregamento
   };
 
+  // ATUALIZAÇÃO AQUI
+  // A lógica de espera será feita no ProtectedRoute
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }

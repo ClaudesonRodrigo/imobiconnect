@@ -16,10 +16,15 @@ export function AuthProvider({ children }) {
       if (user) {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
+        
+        // ATUALIZAÇÃO AQUI:
+        // Verifica se o usuário existe no Firestore E se o status não é 'inativo'
+        if (userDocSnap.exists() && userDocSnap.data().status !== 'inativo') {
           setCurrentUser({ ...user, ...userDocSnap.data() });
         } else {
+          // Se o usuário está inativo ou não existe no DB, força o logout.
           setCurrentUser(null);
+          auth.signOut(); 
         }
       } else {
         setCurrentUser(null);
@@ -29,13 +34,11 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // ATUALIZAÇÃO: Exportando também o estado 'loading'
   const value = {
     currentUser,
     loading
   };
 
-  // ATUALIZAÇÃO: Removendo a condição de !loading daqui
   return (
     <AuthContext.Provider value={value}>
       {children}

@@ -2,12 +2,12 @@
 
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import ListaImoveis from './pages/ListaImoveis';
-import CadastroImovel from './pages/CadastroImovel'; // Manteremos por enquanto, mas a rota mudará
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import SuperAdmin from './pages/SuperAdmin';
-import PaginaCorretor from './pages/PaginaCorretor'
-import AdminPanel from './pages/AdminPanel'; // 1. Importe o novo painel
+import PaginaCorretor from './pages/PaginaCorretor';
+import AdminPanel from './pages/AdminPanel';
+import DetalheImovel from './pages/DetalheImovel'; // Importa a nova página
 
 import { useAuth } from './contexts/AuthContext';
 import { auth } from './services/firebaseConfig';
@@ -60,10 +60,12 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/corretor/:corretorId" element={<PaginaCorretor />} />
           
+          {/* Rota para a página de detalhes do imóvel */}
+          <Route path="/imovel/:imovelId" element={<DetalheImovel />} />
+          
           <Route 
             path="/admin" 
             element={
-              // 2. A rota /admin agora aponta para o novo AdminPanel
               <ProtectedRoute allowedRoles={['superadmin', 'corretor']}>
                 <AdminPanel />
               </ProtectedRoute>

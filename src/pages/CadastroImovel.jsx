@@ -184,132 +184,200 @@ function CadastroImovel() {
   };
 
   return (
-    <div>
-      <h1>Painel do Corretor</h1>
+    <div className="bg-gray-50 min-h-screen">
+      <div className="container mx-auto px-4 py-12">
+        <h1 className="text-4xl font-bold text-gray-800 mb-6">Painel do Corretor</h1>
 
-      {currentUser && (
-        <div style={{ margin: '20px 0', padding: '10px', border: '1px solid green', backgroundColor: '#f0fff0' }}>
-          <p style={{ margin: 0, fontWeight: 'bold' }}>Link da sua Vitrine Pessoal:</p>
-          <Link to={`/corretor/${currentUser.uid}`} target="_blank" rel="noopener noreferrer">
-            https://imobiconnect.netlify.app/corretor/{currentUser.uid}
-          </Link>
-        </div>
-      )}
-
-      <section style={{ margin: '40px 0' }}>
-        <h2>Personalização da sua Página</h2>
-
-        {/* ===== CÓDIGO PARA EXIBIR A LOGO NO PAINEL ===== */}
-        {currentUser?.personalizacao?.logoUrl && (
-            <div style={{ marginBottom: '20px' }}>
-                <p>Sua logo atual:</p>
-                <img 
-                    src={currentUser.personalizacao.logoUrl} 
-                    alt="Sua logo atual"
-                    style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }}
-                />
-            </div>
-        )}
-        {/* ================================================= */}
-
-        <form onSubmit={handlePersonalizacaoSubmit}>
-          <fieldset>
-            <legend>Suas Informações Públicas</legend>
-            <label>Número do WhatsApp (com código do país, ex: 5579...):
-              <input 
-                type="tel" 
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="5579999998888"
-              />
-            </label>
-            <br/><br/>
-            <label>Alterar Logo (imagem):
-              <input 
-                type="file" 
-                accept="image/png, image/jpeg"
-                onChange={(e) => setLogoFile(e.target.files[0])}
-              />
-            </label>
-          </fieldset>
-          <button type="submit" disabled={uploading}>
-            {uploading ? 'Salvando...' : 'Salvar Personalização'}
-          </button>
-        </form>
-      </section>
-
-      <hr style={{ margin: '40px 0' }} />
-
-      <section>
-        <h2>{isEditing ? 'Editando Imóvel' : 'Cadastrar Novo Imóvel'}</h2>
-        <form onSubmit={handleSubmit}>
-            <fieldset>
-                <legend>Informações Principais</legend>
-                <label>Título: <input type="text" name="titulo" value={imovelData.titulo} onChange={handleChange} required /></label><br/>
-                <label>Descrição: <textarea name="descricao" value={imovelData.descricao} onChange={handleChange}></textarea></label><br/>
-                <label>Preço (R$): <input type="number" name="preco" value={imovelData.preco} onChange={handleChange} /></label><br/>
-                <label>Tipo: 
-                    <select name="tipo" value={imovelData.tipo} onChange={handleChange}>
-                    <option value="casa">Casa</option>
-                    <option value="apartamento">Apartamento</option>
-                    <option value="terreno">Terreno</option>
-                    </select>
-                </label><br/>
-                <label>Finalidade: 
-                    <select name="finalidade" value={imovelData.finalidade} onChange={handleChange}>
-                    <option value="venda">Venda</option>
-                    <option value="aluguel">Aluguel</option>
-                    </select>
-                </label><br/>
-            </fieldset>
-            <fieldset>
-                <legend>Endereço</legend>
-                <label>Rua: <input type="text" name="endereco.rua" value={imovelData.endereco.rua} onChange={handleChange} /></label><br/>
-                <label>Número: <input type="text" name="endereco.numero" value={imovelData.endereco.numero} onChange={handleChange} /></label><br/>
-                <label>Bairro: <input type="text" name="endereco.bairro" value={imovelData.endereco.bairro} onChange={handleChange} /></label><br/>
-                <label>Cidade: <input type="text" name="endereco.cidade" value={imovelData.endereco.cidade} onChange={handleChange} /></label><br/>
-                <label>CEP: <input type="text" name="endereco.cep" value={imovelData.endereco.cep} onChange={handleChange} /></label><br/>
-            </fieldset>
-            <fieldset>
-                <legend>Características</legend>
-                <label>Quartos: <input type="number" name="caracteristicas.quartos" value={imovelData.caracteristicas.quartos} onChange={handleChange} /></label><br/>
-                <label>Suítes: <input type="number" name="caracteristicas.suites" value={imovelData.caracteristicas.suites} onChange={handleChange} /></label><br/>
-                <label>Banheiros: <input type="number" name="caracteristicas.banheiros" value={imovelData.caracteristicas.banheiros} onChange={handleChange} /></label><br/>
-                <label>Vagas de Garagem: <input type="number" name="caracteristicas.vagasGaragem" value={imovelData.caracteristicas.vagasGaragem} onChange={handleChange} /></label><br/>
-                <label>Área Total (m²): <input type="number" name="caracteristicas.areaTotal" value={imovelData.caracteristicas.areaTotal} onChange={handleChange} /></label><br/>
-            </fieldset>
-            <button type="submit">{isEditing ? 'Atualizar Imóvel' : 'Cadastrar Imóvel'}</button>
-            {isEditing && (
-                <button type="button" onClick={handleCancelEdit} style={{ marginLeft: '10px', backgroundColor: 'gray' }}>
-                Cancelar Edição
-                </button>
-            )}
-        </form>
-      </section>
-
-      <hr style={{ margin: '40px 0' }} />
-
-      <section>
-        <h2>Meus Imóveis Cadastrados</h2>
-        {loading ? <p>Carregando...</p> : (
-          <div>
-            {meusImoveis.length === 0 ? <p>Você ainda não cadastrou nenhum imóvel.</p> : meusImoveis.map(imovel => (
-              <div key={imovel.id} style={{ border: '1px solid #555', padding: '10px', marginBottom: '10px', textAlign: 'left' }}>
-                <h3>{imovel.titulo}</h3>
-                <p><strong>Preço:</strong> R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
-                <div>
-                  <button onClick={() => handleEdit(imovel)} style={{ backgroundColor: 'darkblue', color: 'white', marginRight: '10px' }}>
-                    Editar
-                  </button>
-                  <button onClick={() => handleDelete(imovel.id)} style={{ backgroundColor: 'darkred', color: 'white' }}>
-                    Apagar
-                  </button>
-                </div>
-              </div>
-            ))}
+        {currentUser && (
+          <div className="mb-8 p-4 border border-blue-200 bg-blue-50 rounded-lg">
+            <p className="font-bold text-blue-800">Sua Vitrine Pessoal está pronta!</p>
+            <Link 
+              to={`/corretor/${currentUser.uid}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline break-all"
+            >
+              https://imobiconnect.netlify.app/corretor/{currentUser.uid}
+            </Link>
           </div>
         )}
-      </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          
+          <div className="lg:col-span-2 space-y-8">
+            <section className="bg-white p-8 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold mb-6">Personalização da sua Página</h2>
+              <form onSubmit={handlePersonalizacaoSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700">Número do WhatsApp</label>
+                    <input 
+                      id="whatsapp"
+                      type="tel" 
+                      value={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.value)}
+                      placeholder="5579999998888"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="logo" className="block text-sm font-medium text-gray-700">
+                      {currentUser?.personalizacao?.logoUrl ? 'Alterar Logo' : 'Enviar Logo'}
+                    </label>
+                    {currentUser?.personalizacao?.logoUrl && (
+                      <img src={currentUser.personalizacao.logoUrl} alt="Sua logo atual" className="w-24 h-24 rounded-full object-cover my-2"/>
+                    )}
+                    <input 
+                      id="logo"
+                      type="file" 
+                      accept="image/png, image/jpeg"
+                      onChange={(e) => setLogoFile(e.target.files[0])}
+                      className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                  </div>
+                <button type="submit" disabled={uploading} className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
+                  {uploading ? 'Salvando...' : 'Salvar Personalização'}
+                </button>
+              </form>
+            </section>
+
+            <section className="bg-white p-8 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold mb-6">{isEditing ? 'Editando Imóvel' : 'Cadastrar Novo Imóvel'}</h2>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                  
+                  {/* GRUPO: INFORMAÇÕES PRINCIPAIS */}
+                  <div className="space-y-4">
+                      <div>
+                          <label htmlFor="titulo" className="block text-sm font-medium text-gray-700">Título do Anúncio</label>
+                          <input type="text" name="titulo" id="titulo" value={imovelData.titulo} onChange={handleChange} required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" />
+                      </div>
+                      
+                      <div>
+                          <label htmlFor="descricao" className="block text-sm font-medium text-gray-700">Descrição</label>
+                          <textarea name="descricao" id="descricao" value={imovelData.descricao} onChange={handleChange} rows="4" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></textarea>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div>
+                              <label htmlFor="preco" className="block text-sm font-medium text-gray-700">Preço (R$)</label>
+                              <input type="number" name="preco" id="preco" value={imovelData.preco} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" />
+                          </div>
+                          <div>
+                              <label htmlFor="tipo" className="block text-sm font-medium text-gray-700">Tipo de Imóvel</label>
+                              <select id="tipo" name="tipo" value={imovelData.tipo} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                  <option value="casa">Casa</option>
+                                  <option value="apartamento">Apartamento</option>
+                                  <option value="terreno">Terreno</option>
+                              </select>
+                          </div>
+                          <div>
+                              <label htmlFor="finalidade" className="block text-sm font-medium text-gray-700">Finalidade</label>
+                              <select id="finalidade" name="finalidade" value={imovelData.finalidade} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                  <option value="venda">Venda</option>
+                                  <option value="aluguel">Aluguel</option>
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* GRUPO: ENDEREÇO */}
+                  <div className="space-y-4 pt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-medium leading-6 text-gray-900">Endereço</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Rua</label>
+                              <input type="text" name="endereco.rua" value={imovelData.endereco.rua} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Número</label>
+                              <input type="text" name="endereco.numero" value={imovelData.endereco.numero} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Bairro</label>
+                              <input type="text" name="endereco.bairro" value={imovelData.endereco.bairro} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Cidade</label>
+                              <input type="text" name="endereco.cidade" value={imovelData.endereco.cidade} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">CEP</label>
+                              <input type="text" name="endereco.cep" value={imovelData.endereco.cep} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* GRUPO: CARACTERÍSTICAS */}
+                  <div className="space-y-4 pt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-medium leading-6 text-gray-900">Características</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Quartos</label>
+                              <input type="number" name="caracteristicas.quartos" value={imovelData.caracteristicas.quartos} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Suítes</label>
+                              <input type="number" name="caracteristicas.suites" value={imovelData.caracteristicas.suites} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Banheiros</label>
+                              <input type="number" name="caracteristicas.banheiros" value={imovelData.caracteristicas.banheiros} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Vagas</label>
+                              <input type="number" name="caracteristicas.vagasGaragem" value={imovelData.caracteristicas.vagasGaragem} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Área (m²)</label>
+                              <input type="number" name="caracteristicas.areaTotal" value={imovelData.caracteristicas.areaTotal} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  {/* BOTÕES DE AÇÃO */}
+                  <div className="flex items-center space-x-4 pt-6">
+                      <button type="submit" className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                          {isEditing ? 'Atualizar Imóvel' : 'Cadastrar Imóvel'}
+                      </button>
+                      {isEditing && (
+                          <button type="button" onClick={handleCancelEdit} className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600">
+                          Cancelar Edição
+                          </button>
+                      )}
+                  </div>
+              </form>
+        </section>
+  
+          </div>
+
+          <div className="lg:col-span-1">
+            <section className="bg-white p-8 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold mb-6">Meus Imóveis Cadastrados</h2>
+              {loading ? <p>Carregando...</p> : (
+                <div className="space-y-4">
+                  {meusImoveis.length === 0 ? (
+                      <p className="text-center text-gray-500">Você ainda não cadastrou nenhum imóvel.</p>
+                  ) : (
+                    meusImoveis.map(imovel => (
+                        <div key={imovel.id} className="border border-gray-200 p-4 rounded-lg">
+                        <h3 className="font-bold text-lg truncate">{imovel.titulo}</h3>
+                        <p className="text-gray-600">R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
+                        <div className="mt-4 space-x-2">
+                            <button onClick={() => handleEdit(imovel)} className="bg-blue-500 text-white text-sm py-1 px-3 rounded hover:bg-blue-600">
+                            Editar
+                            </button>
+                            <button onClick={() => handleDelete(imovel.id)} className="bg-red-500 text-white text-sm py-1 px-3 rounded hover:bg-red-600">
+                            Apagar
+                            </button>
+                        </div>
+                        </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

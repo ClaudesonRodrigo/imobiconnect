@@ -1,77 +1,79 @@
 // src/pages/ListaImoveis.jsx
 
 import { useState, useEffect } from 'react';
-// IMPORTANTE: Precisamos das funções do Firestore para LER dados
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { Link } from 'react-router-dom';
 
 function ListaImoveis() {
-  // useState para guardar a lista de imóveis que virá do banco
   const [imoveis, setImoveis] = useState([]); 
-  // useState para controlar a mensagem de "carregando..."
   const [loading, setLoading] = useState(true);
 
-  // useEffect é um hook do React que executa um código DEPOIS que o componente
-  // é renderizado na tela. Perfeito para buscar dados!
   useEffect(() => {
-    // Criamos uma função async aqui dentro para poder usar o await
     const fetchImoveis = async () => {
       try {
-        // 1. Criamos uma referência para a nossa coleção "imoveis"
         const imoveisCollectionRef = collection(db, 'imoveis');
-
-        // 2. Criamos uma query para buscar os documentos, ordenados pelo mais recente
         const q = query(imoveisCollectionRef, orderBy('createdAt', 'desc'));
-
-        // 3. Executamos a query e pegamos um "snapshot" (uma foto) dos dados
         const querySnapshot = await getDocs(q);
-        
-        // 4. Transformamos o snapshot em um array de objetos que o React entende
         const imoveisData = querySnapshot.docs.map(doc => ({
-          id: doc.id, // Pegamos o ID do documento
-          ...doc.data() // Pegamos todos os outros dados (titulo, preco, etc)
+          id: doc.id,
+          ...doc.data()
         }));
-
-        // 5. Atualizamos o nosso state com os dados buscados
         setImoveis(imoveisData);
-
       } catch (error) {
         console.error("Erro ao buscar imóveis: ", error);
         alert("Falha ao carregar a lista de imóveis.");
       } finally {
-        // 6. Independentemente de sucesso ou erro, paramos de mostrar o "carregando"
         setLoading(false);
       }
     };
+    fetchImoveis();
+  }, []);
 
-    fetchImoveis(); // Executamos a função
-  }, []); // O array vazio [] significa que este useEffect roda APENAS UMA VEZ
-
-  // Se ainda estiver carregando, mostramos uma mensagem
   if (loading) {
-    return <p>Carregando imóveis...</p>;
+    return <p className="text-center text-gray-500 mt-8">Carregando imóveis...</p>;
   }
 
-  // O JSX que será renderizado
   return (
-    <div>
-      <h1>Vitrine de Imóveis</h1>
-      <div className="lista-imoveis-container">
-        {/* Se não houver imóveis, mostramos uma mensagem */}
-        {imoveis.length === 0 ? (
-          <p>Nenhum imóvel cadastrado ainda.</p>
-        ) : (
-          // Se houver imóveis, usamos o .map para criar um "card" para cada um
-          imoveis.map(imovel => (
-            <div key={imovel.id} style={{ border: '1px solid #ccc', margin: '10px', padding: '10px' }}>
-              <h2>{imovel.titulo}</h2>
-              <p><strong>Tipo:</strong> {imovel.tipo}</p>
-              <p><strong>Cidade:</strong> {imovel.endereco.cidade}</p>
-              <p><strong>Preço:</strong> R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
-            </div>
-          ))
-        )}
-      </div>
+    // 'bg-gray-100' - um fundo cinza claro para a página toda
+    <div className="bg-gray-100 min-h-screen">
+        {/* 'container mx-auto px-4 py-8': Centraliza o conteúdo e adiciona padding */}
+        <div className="container mx-auto px-4 py-12">
+            {/* 'text-4xl font-bold text-center mb-12': Título grande, em negrito, centralizado e com margem abaixo */}
+            <h1 className="text-4xl font-bold text-center mb-12 text-gray-800">Vitrine de Imóveis</h1>
+            
+            {imoveis.length === 0 ? (
+                <p className="text-center text-gray-600">Nenhum imóvel cadastrado ainda.</p>
+            ) : (
+                // 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8': Cria um grid responsivo.
+                // 1 coluna em telas pequenas, 2 em médias (md), 3 em grandes (lg). 'gap-8' é o espaçamento.
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {imoveis.map(imovel => (
+                    // A tag Link agora é um grupo para o hover funcionar no card inteiro
+                    <Link to={`/imovel/${imovel.id}`} key={imovel.id} className="block group">
+                    {/* Card principal com sombra, bordas arredondadas e transição suave */}
+                    <div className="bg-white rounded-lg shadow-lg overflow-hidden transform transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
+                        {/* Imagem de Placeholder (vamos adicionar a imagem real depois) */}
+                        <div className="w-full h-56 bg-gray-200 flex items-center justify-center">
+                        <span className="text-gray-500">Imagem do imóvel</span>
+                        </div>
+                        {/* Área de conteúdo do card com padding */}
+                        <div className="p-6">
+                        {/* Título do imóvel */}
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2 truncate">{imovel.titulo}</h2>
+                        {/* Localização */}
+                        <p className="text-gray-600 mb-4">{imovel.endereco.cidade} - {imovel.endereco.bairro}</p>
+                        {/* Preço */}
+                        <p className="text-3xl font-extrabold text-green-600">
+                            R$ {Number(imovel.preco).toLocaleString('pt-BR')}
+                        </p>
+                        </div>
+                    </div>
+                    </Link>
+                ))}
+                </div>
+            )}
+        </div>
     </div>
   );
 }

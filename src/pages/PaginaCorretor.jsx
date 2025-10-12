@@ -1,7 +1,7 @@
 // src/pages/PaginaCorretor.jsx
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { db } from '../services/firebaseConfig';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import WhatsappButton from '../components/WhatsappButton';
@@ -48,46 +48,61 @@ function PaginaCorretor() {
   }, [corretorId]);
 
   if (loading) {
-    return <p>Carregando página do corretor...</p>;
+    return <p className="text-center text-gray-500 mt-8">Carregando página do corretor...</p>;
   }
 
   if (error) {
-    return <p style={{ color: 'red' }}>Erro: {error}</p>;
+    return <p className="text-center text-red-500 mt-8">Erro: {error}</p>;
   }
 
   return (
-    <div>
-      {corretor && (
-        <header style={{ textAlign: 'center', marginBottom: '40px' }}>
-          {/* ===== LÓGICA PARA EXIBIR A LOGO AQUI ===== */}
-          {corretor.personalizacao?.logoUrl && (
-            <img 
-              src={corretor.personalizacao.logoUrl} 
-              alt={`Logo de ${corretor.nome}`} 
-              style={{ width: '150px', height: '150px', borderRadius: '50%', objectFit: 'cover' }}
-            />
-          )}
-          <h1>Imóveis de {corretor.nome}</h1>
-          <p>Contato: {corretor.email}</p>
-        </header>
-      )}
-      
-      <main>
-        {imoveis.length > 0 ? (
-          imoveis.map(imovel => (
-            <div key={imovel.id} style={{ border: '1px solid #ccc', margin: '10px', padding: '10px' }}>
-              <h2>{imovel.titulo}</h2>
-              <p><strong>Tipo:</strong> {imovel.tipo}</p>
-              <p><strong>Cidade:</strong> {imovel.endereco.cidade}</p>
-              <p><strong>Preço:</strong> R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
-            </div>
-          ))
-        ) : (
-          <p>Este corretor não possui imóveis cadastrados no momento.</p>
+    <div className="bg-gray-100 min-h-screen">
+      <div className="container mx-auto px-4 py-12">
+        {corretor && (
+          <header className="flex flex-col items-center text-center mb-12">
+            {corretor.personalizacao?.logoUrl ? (
+              <img 
+                src={corretor.personalizacao.logoUrl} 
+                alt={`Logo de ${corretor.nome}`} 
+                className="w-32 h-32 rounded-full object-cover mb-4 shadow-lg border-4 border-white"
+              />
+            ) : (
+              <div className="w-32 h-32 rounded-full bg-gray-300 mb-4 flex items-center justify-center shadow-lg border-4 border-white">
+                <span className="text-gray-500">Sem Logo</span>
+              </div>
+            )}
+            <h1 className="text-4xl font-bold text-gray-800">Imóveis de {corretor.nome}</h1>
+            <p className="text-lg text-gray-600 mt-2">{corretor.email}</p>
+          </header>
         )}
-      </main>
-      {/* 2. Adicione o botão flutuante aqui! */}
-      {corretor && <WhatsappButton phoneNumber={corretor.personalizacao?.whatsapp} />}
+        
+        <main>
+          {imoveis.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {imoveis.map(imovel => (
+                <Link to={`/imovel/${imovel.id}`} key={imovel.id} className="block group">
+                  <div className="bg-white rounded-lg shadow-lg overflow-hidden transform transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
+                    <div className="w-full h-56 bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-500">Imagem do imóvel</span>
+                    </div>
+                    <div className="p-6">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2 truncate">{imovel.titulo}</h2>
+                      <p className="text-gray-600 mb-4">{imovel.endereco.cidade} - {imovel.endereco.bairro}</p>
+                      <p className="text-3xl font-extrabold text-green-600">
+                        R$ {Number(imovel.preco).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-600 bg-white p-8 rounded-lg shadow-md">Este corretor não possui imóveis cadastrados no momento.</p>
+          )}
+        </main>
+        
+        {corretor && <WhatsappButton phoneNumber={corretor.personalizacao?.whatsapp} />}
+      </div>
     </div>
   );
 }

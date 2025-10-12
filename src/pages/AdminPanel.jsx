@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConfig';
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { Link } from 'react-router-dom';
 
 // O estado inicial do formulário, que agora vive aqui
 const initialState = {
@@ -20,15 +21,24 @@ function AdminPanel() {
   // --- States da Aba "Meus Imóveis" ---
   const [meusImoveis, setMeusImoveis] = useState([]);
   const [loadingImoveis, setLoadingImoveis] = useState(true);
-  
+
   // --- States da Aba "Cadastrar / Editar" (Movidos para cá) ---
   const [imovelData, setImovelData] = useState(initialState);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [forceUpdate, setForceUpdate] = useState(false); // Para forçar a recarga da lista
 
+  // --- States da Aba "Personalização" ---
+  const [whatsapp, setWhatsapp] = useState('');
+  const [logoFile, setLogoFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
     if (!currentUser) return;
+
+    if (currentUser.personalizacao) {
+      setWhatsapp(currentUser.personalizacao.whatsapp || '');
+    }
 
     const fetchMeusImoveis = async () => {
       setLoadingImoveis(true);
@@ -84,7 +94,7 @@ function AdminPanel() {
         await addDoc(collection(db, "imoveis"), {
           ...dataToSave,
           createdAt: serverTimestamp(),
-          corretorId: currentUser.uid 
+          corretorId: currentUser.uid
         });
         alert(`Imóvel cadastrado com sucesso!`);
         setImovelData(initialState);
@@ -93,7 +103,7 @@ function AdminPanel() {
     setForceUpdate(prev => !prev);
     setActiveTab('meusImoveis');
   };
-  
+
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditingId(null);
@@ -119,6 +129,60 @@ function AdminPanel() {
       } catch (error) { console.error("Erro ao apagar: ", error); alert("Erro ao apagar."); }
     }
   };
+
+  // --- Função de Personalização ---
+  const handlePersonalizacaoSubmit = async (e) => {
+    e.preventDefault();
+    if (!currentUser) {
+      alert("Você precisa estar logado para salvar.");
+      return;
+    }
+    setUploading(true);
+
+    try {
+      let logoUrl = currentUser.personalizacao?.logoUrl || '';
+
+      if (logoFile) {
+        // Lógica de upload para o Cloudinary (ou outro serviço)
+        const formData = new FormData();
+        formData.append('file', logoFile);
+        formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+
+        const data = await response.json();
+        if (data.secure_url) {
+          logoUrl = data.secure_url;
+        } else {
+          throw new Error('Falha no upload para o Cloudinary.');
+        }
+      }
+
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        personalizacao: {
+          whatsapp: whatsapp,
+          logoUrl: logoUrl
+        }
+      }, { merge: true });
+
+      alert("Personalização salva com sucesso! Pode ser necessário recarregar a página para que as alterações tenham efeito no seu perfil.");
+      setLogoFile(null);
+
+    } catch (error) {
+      console.error("Erro ao salvar personalização: ", error);
+      alert("Ocorreu um erro ao salvar a personalização.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
 
   // --- Função que Renderiza o Conteúdo da Aba ---
   const renderContent = () => {
@@ -182,6 +246,59 @@ function AdminPanel() {
                   </select>
                 </div>
               </div>
+               {/* GRUPO: ENDEREÇO */}
+               <div className="space-y-4 pt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-medium leading-6 text-gray-900">Endereço</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Rua</label>
+                              <input type="text" name="endereco.rua" value={imovelData.endereco.rua} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Número</label>
+                              <input type="text" name="endereco.numero" value={imovelData.endereco.numero} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Bairro</label>
+                              <input type="text" name="endereco.bairro" value={imovelData.endereco.bairro} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Cidade</label>
+                              <input type="text" name="endereco.cidade" value={imovelData.endereco.cidade} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">CEP</label>
+                              <input type="text" name="endereco.cep" value={imovelData.endereco.cep} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* GRUPO: CARACTERÍSTICAS */}
+                  <div className="space-y-4 pt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-medium leading-6 text-gray-900">Características</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Quartos</label>
+                              <input type="number" name="caracteristicas.quartos" value={imovelData.caracteristicas.quartos} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Suítes</label>
+                              <input type="number" name="caracteristicas.suites" value={imovelData.caracteristicas.suites} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Banheiros</label>
+                              <input type="number" name="caracteristicas.banheiros" value={imovelData.caracteristicas.banheiros} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Vagas</label>
+                              <input type="number" name="caracteristicas.vagasGaragem" value={imovelData.caracteristicas.vagasGaragem} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">Área (m²)</label>
+                              <input type="number" name="caracteristicas.areaTotal" value={imovelData.caracteristicas.areaTotal} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"/>
+                          </div>
+                      </div>
+                  </div>
               <div className="flex items-center space-x-4 pt-6">
                 <button type="submit" className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">{isEditing ? 'Atualizar Imóvel' : 'Cadastrar Imóvel'}</button>
                 {isEditing && (
@@ -192,7 +309,55 @@ function AdminPanel() {
           </section>
         );
       case 'personalizacao':
-        return <div className="bg-white p-8 rounded-lg shadow-md">O formulário de personalização virá para esta aba.</div>;
+        return (
+          <section className="bg-white p-8 rounded-lg shadow-md">
+            <h2 className="text-2xl font-semibold mb-6">Personalização da sua Página</h2>
+            {currentUser && (
+          <div className="mb-8 p-4 border border-blue-200 bg-blue-50 rounded-lg">
+            <p className="font-bold text-blue-800">Sua Vitrine Pessoal está pronta!</p>
+            <Link 
+              to={`/corretor/${currentUser.uid}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline break-all"
+            >
+              https://imobiconnect.netlify.app/corretor/{currentUser.uid}
+            </Link>
+          </div>
+        )}
+            <form onSubmit={handlePersonalizacaoSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700">Número do WhatsApp</label>
+                  <input 
+                    id="whatsapp"
+                    type="tel" 
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="5579999998888"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="logo" className="block text-sm font-medium text-gray-700">
+                    {currentUser?.personalizacao?.logoUrl ? 'Alterar Logo' : 'Enviar Logo'}
+                  </label>
+                  {currentUser?.personalizacao?.logoUrl && (
+                    <img src={currentUser.personalizacao.logoUrl} alt="Sua logo atual" className="w-24 h-24 rounded-full object-cover my-2"/>
+                  )}
+                  <input 
+                    id="logo"
+                    type="file" 
+                    accept="image/png, image/jpeg"
+                    onChange={(e) => setLogoFile(e.target.files[0])}
+                    className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  />
+                </div>
+              <button type="submit" disabled={uploading} className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
+                {uploading ? 'Salvando...' : 'Salvar Personalização'}
+              </button>
+            </form>
+          </section>
+        );
       default:
         return null;
     }

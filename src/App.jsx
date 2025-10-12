@@ -2,13 +2,13 @@
 
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import ListaImoveis from './pages/ListaImoveis';
-import CadastroImovel from './pages/CadastroImovel';
+import CadastroImovel from './pages/CadastroImovel'; // Manteremos por enquanto, mas a rota mudará
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import SuperAdmin from './pages/SuperAdmin';
 import PaginaCorretor from './pages/PaginaCorretor'
+import AdminPanel from './pages/AdminPanel'; // 1. Importe o novo painel
 
-// 1. Importe as ferramentas que precisamos
 import { useAuth } from './contexts/AuthContext';
 import { auth } from './services/firebaseConfig';
 import { signOut } from 'firebase/auth';
@@ -16,16 +16,14 @@ import { signOut } from 'firebase/auth';
 import './App.css';
 
 function App() {
-  // 2. Pegue o usuário atual do nosso contexto
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  // 3. Crie a função de logout
   const handleLogout = async () => {
     try {
       await signOut(auth);
       alert("Você saiu com sucesso!");
-      navigate('/login'); // Redireciona para a página de login após o logout
+      navigate('/login');
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
       alert("Falha ao sair.");
@@ -34,46 +32,54 @@ function App() {
 
   return (
     <div className="App">
-      <nav style={{ marginBottom: '20px', borderBottom: '1px solid #ccc', paddingBottom: '10px' }}>
-        <Link to="/" style={{ marginRight: '10px' }}>Vitrine</Link>
-        
-        {/* 4. Lógica para mostrar/esconder links */}
-        {currentUser ? (
-          <>
-            <Link to="/admin" style={{ marginRight: '10px' }}>Cadastrar Imóvel</Link>
-            <button onClick={handleLogout}>Sair</button>
-          </>
-        ) : (
-          <Link to="/login">Login (Corretor)</Link>
-        )}
+      <nav className="bg-white shadow-sm">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center py-4">
+            <Link to="/" className="text-xl font-bold text-indigo-600">ImobiConnect</Link>
+            <div className="flex items-center space-x-4">
+              <Link to="/" className="text-gray-500 hover:text-indigo-600">Vitrine</Link>
+              {currentUser ? (
+                <>
+                  <Link to="/admin" className="text-gray-500 hover:text-indigo-600">Meu Painel</Link>
+                  {currentUser.role === 'superadmin' && (
+                    <Link to="/superadmin" className="text-gray-500 hover:text-indigo-600">Super Admin</Link>
+                  )}
+                  <button onClick={handleLogout} className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-indigo-700">Sair</button>
+                </>
+              ) : (
+                <Link to="/login" className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-indigo-700">Login</Link>
+              )}
+            </div>
+          </div>
+        </div>
       </nav>
 
-      <Routes>
-        {/* Rotas Públicas */}
-        <Route path="/" element={<ListaImoveis />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/corretor/:corretorId" element={<PaginaCorretor />} />
-        {/* Rotas Protegidas com PAPÉIS ESPECÍFICOS */}
-        <Route 
-          path="/admin" 
-          element={
-            // Permitido para superadmin E corretor
-            <ProtectedRoute allowedRoles={['superadmin', 'corretor']}>
-              <CadastroImovel />
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/superadmin" 
-          element={
-            // Permitido APENAS para superadmin
-            <ProtectedRoute allowedRoles={['superadmin']}>
-              <SuperAdmin />
-            </ProtectedRoute>
-          } 
-        />
-      </Routes>
+      <main>
+        <Routes>
+          <Route path="/" element={<ListaImoveis />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/corretor/:corretorId" element={<PaginaCorretor />} />
+          
+          <Route 
+            path="/admin" 
+            element={
+              // 2. A rota /admin agora aponta para o novo AdminPanel
+              <ProtectedRoute allowedRoles={['superadmin', 'corretor']}>
+                <AdminPanel />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/superadmin" 
+            element={
+              <ProtectedRoute allowedRoles={['superadmin']}>
+                <SuperAdmin />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </main>
     </div>
   )
 }

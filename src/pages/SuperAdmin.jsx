@@ -231,7 +231,8 @@ function SuperAdmin() {
                 return (
                   <div key={imovel.id} className="border border-gray-200 p-4 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center">
                     <div className="flex items-center space-x-4">
-                      <img src={imovel.fotos?.[0] || 'https://via.placeholder.com/100'} alt={imovel.titulo} className="w-20 h-20 object-cover rounded-md bg-gray-200"/>
+                      {/* CORREÇÃO AQUI */}
+                      <img src={imovel.fotos?.[0] || 'https://placehold.co/100x100'} alt={imovel.titulo} className="w-20 h-20 object-cover rounded-md bg-gray-200"/>
                       <div>
                         <strong className="text-gray-900">{imovel.titulo}</strong>
                         <p className="text-sm text-gray-600">R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>

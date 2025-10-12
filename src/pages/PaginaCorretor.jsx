@@ -82,9 +82,16 @@ function PaginaCorretor() {
               {imoveis.map(imovel => (
                 <Link to={`/imovel/${imovel.id}`} key={imovel.id} className="block group">
                   <div className="bg-white rounded-lg shadow-lg overflow-hidden transform transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
-                    <div className="w-full h-56 bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-500">Imagem do imóvel</span>
+                    
+                    {/* ATUALIZAÇÃO AQUI */}
+                    <div className="w-full h-56 bg-gray-200 flex items-center justify-center overflow-hidden">
+                      {imovel.fotos && imovel.fotos.length > 0 ? (
+                        <img src={imovel.fotos[0]} alt={imovel.titulo} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-gray-500">Sem Foto</span>
+                      )}
                     </div>
+
                     <div className="p-6">
                       <h2 className="text-2xl font-bold text-gray-800 mb-2 truncate">{imovel.titulo}</h2>
                       <p className="text-gray-600 mb-4">{imovel.endereco.cidade} - {imovel.endereco.bairro}</p>

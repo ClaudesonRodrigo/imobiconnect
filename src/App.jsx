@@ -7,7 +7,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import SuperAdmin from './pages/SuperAdmin';
 import PaginaCorretor from './pages/PaginaCorretor';
 import AdminPanel from './pages/AdminPanel';
-import DetalheImovel from './pages/DetalheImovel'; // Importa a nova página
+import DetalheImovel from './pages/DetalheImovel';
+import DetalheTransacao from './pages/DetalheTransacao'; // 1. IMPORTE A NOVA PÁGINA
 
 import { useAuth } from './contexts/AuthContext';
 import { auth } from './services/firebaseConfig';
@@ -59,9 +60,17 @@ function App() {
           <Route path="/" element={<ListaImoveis />} />
           <Route path="/login" element={<Login />} />
           <Route path="/corretor/:corretorId" element={<PaginaCorretor />} />
-          
-          {/* Rota para a página de detalhes do imóvel */}
           <Route path="/imovel/:imovelId" element={<DetalheImovel />} />
+          
+          {/* 2. ADICIONE A NOVA ROTA DE TRANSAÇÃO (PROTEGIDA) */}
+          <Route 
+            path="/transacao/:transacaoId"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'corretor']}>
+                <DetalheTransacao />
+              </ProtectedRoute>
+            }
+          />
           
           <Route 
             path="/admin" 

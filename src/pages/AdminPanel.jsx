@@ -42,9 +42,18 @@ function AdminPanel() {
   const [videoFile, setVideoFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [photoPreviews, setPhotoPreviews] = useState(Array(5).fill(null));
+  
+  // --- NOVOS ESTADOS PARA PERSONALIZAÇÃO ---
   const [whatsapp, setWhatsapp] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [creci, setCreci] = useState('');
+  const [bio, setBio] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [facebook, setFacebook] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  // --- FIM DOS NOVOS ESTADOS ---
+
   const [transacoes, setTransacoes] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
@@ -53,8 +62,15 @@ function AdminPanel() {
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
+    // ATUALIZAÇÃO: Carregar todos os dados de personalização
     if (currentUser.personalizacao) {
-      setWhatsapp(currentUser.personalizacao.whatsapp || '');
+      const { personalizacao } = currentUser;
+      setWhatsapp(personalizacao.whatsapp || '');
+      setTelefone(personalizacao.telefone || '');
+      setCreci(personalizacao.creci || '');
+      setBio(personalizacao.bio || '');
+      setInstagram(personalizacao.social?.instagram || '');
+      setFacebook(personalizacao.social?.facebook || '');
     }
     const fetchData = async () => {
       try {
@@ -243,27 +259,37 @@ function AdminPanel() {
     }
   };
 
+  // ATUALIZAÇÃO: Salvar todos os novos campos no banco
   const handlePersonalizacaoSubmit = async (e) => {
     e.preventDefault();
     if (!currentUser) return;
     setUploadingLogo(true);
     try {
       const logoUrl = await uploadFile(logoFile);
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        personalizacao: {
-          whatsapp: whatsapp,
-          logoUrl: logoUrl || currentUser.personalizacao?.logoUrl || ''
+      const personalizacaoData = {
+        whatsapp: whatsapp,
+        logoUrl: logoUrl || currentUser.personalizacao?.logoUrl || '',
+        telefone: telefone,
+        creci: creci,
+        bio: bio,
+        social: {
+          instagram: instagram,
+          facebook: facebook,
         }
+      };
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        personalizacao: personalizacaoData
       }, { merge: true });
       alert("Personalização salva!");
       setLogoFile(null);
     } catch (err) {
+      console.error("Erro ao salvar personalização:", err);
       alert("Erro ao salvar.");
     } finally {
       setUploadingLogo(false);
     }
   };
-
+  
   const handleSaveInteraction = async (interactionData) => {
     try {
         const interactionCollectionRef = collection(db, 'transacoes', interactionData.clienteId, 'interactions');
@@ -291,14 +317,13 @@ function AdminPanel() {
     setSelectedClient(null);
   }
   
-  // Função para gerar o link do Google Calendar
   const generateGoogleCalendarLink = (cliente) => {
     const imovel = meusImoveis.find(i => i.id === cliente.imovelId);
     if (!imovel) return '#';
 
     const startTime = new Date();
-    startTime.setHours(startTime.getHours() + 1); // Evento começa em 1 hora
-    const endTime = new Date(startTime.getTime() + (60 * 60 * 1000)); // Duração de 1 hora
+    startTime.setHours(startTime.getHours() + 1); 
+    const endTime = new Date(startTime.getTime() + (60 * 60 * 1000)); 
 
     const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, '');
 
@@ -484,15 +509,41 @@ function AdminPanel() {
                 </Link>
               </div>
             )}
-            <form onSubmit={handlePersonalizacaoSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700">Número do WhatsApp</label>
-                <input id="whatsapp" type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="5579999998888" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" />
+            <form onSubmit={handlePersonalizacaoSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="creci" className="block text-sm font-medium text-gray-700">Seu CRECI</label>
+                  <input id="creci" type="text" value={creci} onChange={(e) => setCreci(e.target.value)} placeholder="Ex: 12345-F" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+                </div>
+                <div>
+                  <label htmlFor="telefone" className="block text-sm font-medium text-gray-700">Telefone para Contato (Ligar)</label>
+                  <input id="telefone" type="tel" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="5579999998888" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+                </div>
               </div>
               <div>
-                <label htmlFor="logo" className="block text-sm font-medium text-gray-700">{currentUser?.personalizacao?.logoUrl ? 'Alterar Logo' : 'Enviar Logo'}</label>
-                {currentUser?.personalizacao?.logoUrl && (<img src={currentUser.personalizacao.logoUrl} alt="Sua logo atual" className="w-24 h-24 rounded-full object-cover my-2"/>)}
-                <input id="logo" type="file" accept="image/png, image/jpeg" onChange={(e) => setLogoFile(e.target.files[0])} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+                <label htmlFor="bio" className="block text-sm font-medium text-gray-700">Bio / Sobre Mim</label>
+                <textarea id="bio" rows="3" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Fale um pouco sobre sua experiência e especialidade." className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="instagram" className="block text-sm font-medium text-gray-700">Link do Instagram</label>
+                  <input id="instagram" type="url" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="https://instagram.com/seu-usuario" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+                </div>
+                <div>
+                  <label htmlFor="facebook" className="block text-sm font-medium text-gray-700">Link do Facebook</label>
+                  <input id="facebook" type="url" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="https://facebook.com/seu-usuario" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div>
+                    <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700">WhatsApp (para o botão)</label>
+                    <input id="whatsapp" type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="5579999998888" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+                </div>
+                <div>
+                  <label htmlFor="logo" className="block text-sm font-medium text-gray-700">{currentUser?.personalizacao?.logoUrl ? 'Alterar Logo' : 'Enviar Logo'}</label>
+                  {currentUser?.personalizacao?.logoUrl && (<img src={currentUser.personalizacao.logoUrl} alt="Sua logo atual" className="w-24 h-24 rounded-full object-cover my-2"/>)}
+                  <input id="logo" type="file" accept="image/png, image/jpeg" onChange={(e) => setLogoFile(e.target.files[0])} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+                </div>
               </div>
               <button type="submit" disabled={uploadingLogo} className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
                 {uploadingLogo ? 'Salvando...' : 'Salvar Personalização'}

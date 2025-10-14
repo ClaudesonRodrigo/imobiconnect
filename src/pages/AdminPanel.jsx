@@ -5,10 +5,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConfig';
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
-import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus } from 'lucide-react';
+import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus, Sparkles } from 'lucide-react';
 import NovaTransacaoModal from '../components/NovaTransacaoModal';
 import InteractionModal from '../components/InteractionModal';
-import imageCompression from 'browser-image-compression'; // 1. IMPORTAR A BIBLIOTECA
+import imageCompression from 'browser-image-compression';
+import { gerarDescricaoDeAnuncio } from '../services/geminiService';
 
 const initialState = {
   titulo: '',
@@ -58,6 +59,11 @@ function AdminPanel() {
   const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
+  const [selectedImovelId, setSelectedImovelId] = useState('');
+  const [generatedDesc, setGeneratedDesc] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
@@ -74,7 +80,11 @@ function AdminPanel() {
       try {
         const imoveisQuery = query(collection(db, 'imoveis'), where("corretorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
         const imoveisSnapshot = await getDocs(imoveisQuery);
-        setMeusImoveis(imoveisSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const imoveisList = imoveisSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMeusImoveis(imoveisList);
+        if (imoveisList.length > 0) {
+          setSelectedImovelId(imoveisList[0].id);
+        }
 
         const transacoesQuery = query(collection(db, 'transacoes'), where("corretorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
         const transacoesSnapshot = await getDocs(transacoesQuery);
@@ -136,7 +146,6 @@ function AdminPanel() {
     }
   };
 
-  // 2. FUNÇÃO DE UPLOAD ATUALIZADA (AGORA USADA PRINCIPALMENTE PARA VÍDEOS E LOGO)
   const uploadFile = async (file) => {
     if (!file) return null;
     const formData = new FormData();
@@ -153,47 +162,34 @@ function AdminPanel() {
       return null;
     }
   };
-
-  // 3. NOVA FUNÇÃO QUE COMPRIME A IMAGEM ANTES DE ENVIAR
+  
   const compressAndUploadFile = async (file) => {
     if (!file) return null;
-    
-    // Se não for imagem, usa o upload normal
     if (!file.type.startsWith('image')) {
       return uploadFile(file);
     }
-
-    console.log(`Original file size: ${file.size / 1024 / 1024} MB`);
-
     const options = {
-      maxSizeMB: 1, // Define o tamanho máximo para 1MB
-      maxWidthOrHeight: 1920, // Redimensiona para no máximo 1920px de largura ou altura
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1920,
       useWebWorker: true,
     }
     try {
       const compressedFile = await imageCompression(file, options);
-      console.log(`Compressed file size: ${compressedFile.size / 1024 / 1024} MB`);
       return uploadFile(compressedFile);
     } catch (error) {
       console.error('Erro na compressão:', error);
-      return uploadFile(file); // Em caso de erro na compressão, tenta enviar o original
+      return uploadFile(file);
     }
   };
 
 
-  // 4. ATUALIZAÇÃO NO `handleSubmit` PARA USAR A NOVA FUNÇÃO DE COMPRESSÃO
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsUploading(true);
     try {
-      // Usa a nova função para comprimir e fazer upload
-      const photoUploadPromises = photoFiles.map(file => compressAndUploadFile(file)); 
-      
+      const photoUploadPromises = photoFiles.map(file => compressAndUploadFile(file));
       const uploadedPhotoUrls = (await Promise.all(photoUploadPromises)).filter(Boolean);
-      
-      // Upload do vídeo continua normal
-      const videoUrl = await uploadFile(videoFile); 
-      
+      const videoUrl = await uploadFile(videoFile);
       const existingPhotos = isEditing ? imovelData.fotos.filter(url => !photoPreviews.includes(url) || uploadedPhotoUrls.includes(url)) : [];
       const finalPhotoUrls = [...existingPhotos, ...uploadedPhotoUrls].filter((value, index, self) => self.indexOf(value) === index);
       const dataToSave = {
@@ -296,7 +292,6 @@ function AdminPanel() {
     if (!currentUser) return;
     setUploadingLogo(true);
     try {
-      // A logo também será comprimida se for uma imagem
       const logoUrl = await compressAndUploadFile(logoFile); 
       const personalizacaoData = {
         whatsapp: whatsapp,
@@ -368,6 +363,29 @@ function AdminPanel() {
     return url.href;
   };
 
+  const handleGenerateDescription = async () => {
+    if (!selectedImovelId) {
+      alert("Por favor, selecione um imóvel primeiro.");
+      return;
+    }
+    const imovel = meusImoveis.find(i => i.id === selectedImovelId);
+    if (!imovel) {
+      alert("Imóvel não encontrado.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setGeneratedDesc('');
+    try {
+      const descricao = await gerarDescricaoDeAnuncio(imovel);
+      setGeneratedDesc(descricao);
+    } catch (error) {
+      setGeneratedDesc("Ocorreu um erro ao gerar a descrição.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const TransactionCard = ({ transacao }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     
@@ -403,6 +421,63 @@ function AdminPanel() {
 
   const renderContent = () => {
     switch (activeTab) {
+        case 'copiloto':
+        return (
+          <section className="bg-white p-8 rounded-lg shadow-md">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-800">Copiloto IA</h2>
+              <p className="text-gray-600 mt-2">Seu assistente para criar anúncios de alto impacto.</p>
+            </div>
+            
+            <div className="max-w-2xl mx-auto">
+              <div>
+                <label htmlFor="imovel-select" className="block text-sm font-medium text-gray-700">Selecione um imóvel para começar</label>
+                <select 
+                  id="imovel-select" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                  value={selectedImovelId}
+                  onChange={(e) => setSelectedImovelId(e.target.value)}
+                  disabled={meusImoveis.length === 0}
+                >
+                  {meusImoveis.length > 0 ? (
+                    meusImoveis.map(imovel => (
+                      <option key={imovel.id} value={imovel.id}>{imovel.titulo}</option>
+                    ))
+                  ) : (
+                    <option>Nenhum imóvel cadastrado</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="mt-6">
+                <button 
+                  onClick={handleGenerateDescription}
+                  disabled={isGenerating || !selectedImovelId}
+                  className="w-full inline-flex justify-center items-center bg-indigo-600 text-white py-3 px-6 rounded-md hover:bg-indigo-700 disabled:bg-gray-400 font-semibold"
+                >
+                  <Sparkles size={20} className="mr-2"/>
+                  {isGenerating ? 'Gerando, aguarde...' : 'Gerar Descrição do Anúncio'}
+                </button>
+              </div>
+
+              {generatedDesc && (
+                <div className="mt-8 p-6 border border-gray-200 rounded-lg bg-gray-50">
+                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Sugestão de Anúncio:</h3>
+                   <div 
+                     className="prose prose-sm max-w-none whitespace-pre-wrap"
+                     dangerouslySetInnerHTML={{ __html: generatedDesc.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }}
+                   />
+                   <button 
+                     onClick={() => navigator.clipboard.writeText(generatedDesc)}
+                     className="mt-4 text-sm text-indigo-600 hover:underline font-semibold"
+                   >
+                     Copiar Texto
+                   </button>
+                </div>
+              )}
+            </div>
+          </section>
+        );
       case 'transacoes':
         return (
           <section className="bg-gray-50 p-4 -m-4 rounded-lg">
@@ -645,6 +720,9 @@ function AdminPanel() {
 
         <div className="mb-8 border-b border-gray-200">
           <nav className="-mb-px flex space-x-6 overflow-x-auto">
+            <button onClick={() => setActiveTab('copiloto')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 flex items-center gap-2 ${ activeTab === 'copiloto' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+              <Sparkles size={16}/> Copiloto IA
+            </button>
             <button onClick={() => setActiveTab('transacoes')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${ activeTab === 'transacoes' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
               Transações
             </button>

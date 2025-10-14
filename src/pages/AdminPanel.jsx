@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus } from 'lucide-react';
 import NovaTransacaoModal from '../components/NovaTransacaoModal';
 import InteractionModal from '../components/InteractionModal';
+import imageCompression from 'browser-image-compression'; // 1. IMPORTAR A BIBLIOTECA
 
 const initialState = {
   titulo: '',
@@ -43,7 +44,6 @@ function AdminPanel() {
   const [isUploading, setIsUploading] = useState(false);
   const [photoPreviews, setPhotoPreviews] = useState(Array(5).fill(null));
   
-  // --- NOVOS ESTADOS PARA PERSONALIZAÇÃO ---
   const [whatsapp, setWhatsapp] = useState('');
   const [telefone, setTelefone] = useState('');
   const [creci, setCreci] = useState('');
@@ -52,7 +52,6 @@ function AdminPanel() {
   const [facebook, setFacebook] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  // --- FIM DOS NOVOS ESTADOS ---
 
   const [transacoes, setTransacoes] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,7 +61,6 @@ function AdminPanel() {
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
-    // ATUALIZAÇÃO: Carregar todos os dados de personalização
     if (currentUser.personalizacao) {
       const { personalizacao } = currentUser;
       setWhatsapp(personalizacao.whatsapp || '');
@@ -138,6 +136,7 @@ function AdminPanel() {
     }
   };
 
+  // 2. FUNÇÃO DE UPLOAD ATUALIZADA (AGORA USADA PRINCIPALMENTE PARA VÍDEOS E LOGO)
   const uploadFile = async (file) => {
     if (!file) return null;
     const formData = new FormData();
@@ -155,13 +154,46 @@ function AdminPanel() {
     }
   };
 
+  // 3. NOVA FUNÇÃO QUE COMPRIME A IMAGEM ANTES DE ENVIAR
+  const compressAndUploadFile = async (file) => {
+    if (!file) return null;
+    
+    // Se não for imagem, usa o upload normal
+    if (!file.type.startsWith('image')) {
+      return uploadFile(file);
+    }
+
+    console.log(`Original file size: ${file.size / 1024 / 1024} MB`);
+
+    const options = {
+      maxSizeMB: 1, // Define o tamanho máximo para 1MB
+      maxWidthOrHeight: 1920, // Redimensiona para no máximo 1920px de largura ou altura
+      useWebWorker: true,
+    }
+    try {
+      const compressedFile = await imageCompression(file, options);
+      console.log(`Compressed file size: ${compressedFile.size / 1024 / 1024} MB`);
+      return uploadFile(compressedFile);
+    } catch (error) {
+      console.error('Erro na compressão:', error);
+      return uploadFile(file); // Em caso de erro na compressão, tenta enviar o original
+    }
+  };
+
+
+  // 4. ATUALIZAÇÃO NO `handleSubmit` PARA USAR A NOVA FUNÇÃO DE COMPRESSÃO
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsUploading(true);
     try {
-      const photoUploadPromises = photoFiles.map(file => uploadFile(file));
+      // Usa a nova função para comprimir e fazer upload
+      const photoUploadPromises = photoFiles.map(file => compressAndUploadFile(file)); 
+      
       const uploadedPhotoUrls = (await Promise.all(photoUploadPromises)).filter(Boolean);
-      const videoUrl = await uploadFile(videoFile);
+      
+      // Upload do vídeo continua normal
+      const videoUrl = await uploadFile(videoFile); 
+      
       const existingPhotos = isEditing ? imovelData.fotos.filter(url => !photoPreviews.includes(url) || uploadedPhotoUrls.includes(url)) : [];
       const finalPhotoUrls = [...existingPhotos, ...uploadedPhotoUrls].filter((value, index, self) => self.indexOf(value) === index);
       const dataToSave = {
@@ -259,13 +291,13 @@ function AdminPanel() {
     }
   };
 
-  // ATUALIZAÇÃO: Salvar todos os novos campos no banco
   const handlePersonalizacaoSubmit = async (e) => {
     e.preventDefault();
     if (!currentUser) return;
     setUploadingLogo(true);
     try {
-      const logoUrl = await uploadFile(logoFile);
+      // A logo também será comprimida se for uma imagem
+      const logoUrl = await compressAndUploadFile(logoFile); 
       const personalizacaoData = {
         whatsapp: whatsapp,
         logoUrl: logoUrl || currentUser.personalizacao?.logoUrl || '',

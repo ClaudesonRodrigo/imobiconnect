@@ -5,23 +5,23 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConfig';
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
-import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical } from 'lucide-react';
+import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus } from 'lucide-react';
 import NovaTransacaoModal from '../components/NovaTransacaoModal';
+import InteractionModal from '../components/InteractionModal';
 
 const initialState = {
-  titulo: '', 
-  descricao: '', 
-  tipo: 'casa', 
-  finalidade: 'venda', 
-  preco: 0, 
+  titulo: '',
+  descricao: '',
+  tipo: 'casa',
+  finalidade: 'venda',
+  preco: 0,
   status: 'disponivel',
   endereco: { rua: '', numero: '', bairro: '', cidade: '', cep: '' },
   caracteristicas: { quartos: 0, suites: 0, banheiros: 0, vagasGaragem: 0, areaTotal: 0 },
-  fotos: [], 
+  fotos: [],
   videoUrl: ''
 };
 
-// Definindo as colunas do nosso Kanban
 const KANBAN_COLUMNS = [
   { id: 'Novas', title: 'Novas', color: 'bg-blue-500' },
   { id: 'Em Andamento', title: 'Em Andamento', color: 'bg-yellow-500' },
@@ -45,9 +45,10 @@ function AdminPanel() {
   const [whatsapp, setWhatsapp] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-
   const [transacoes, setTransacoes] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isInteractionModalOpen, setIsInteractionModalOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -263,6 +264,53 @@ function AdminPanel() {
     }
   };
 
+  const handleSaveInteraction = async (interactionData) => {
+    try {
+        const interactionCollectionRef = collection(db, 'transacoes', interactionData.clienteId, 'interactions');
+        await addDoc(interactionCollectionRef, {
+            tipo: interactionData.tipo,
+            notas: interactionData.notas,
+            createdAt: serverTimestamp(),
+        });
+        alert("Interação registrada com sucesso!");
+        setIsInteractionModalOpen(false);
+        setSelectedClient(null);
+    } catch (error) {
+        console.error("Erro ao registrar interação:", error);
+        alert("Falha ao registrar interação.");
+    }
+  };
+
+  const openInteractionModal = (client) => {
+    setSelectedClient(client);
+    setIsInteractionModalOpen(true);
+  };
+
+  const closeInteractionModal = () => {
+    setIsInteractionModalOpen(false);
+    setSelectedClient(null);
+  }
+  
+  // Função para gerar o link do Google Calendar
+  const generateGoogleCalendarLink = (cliente) => {
+    const imovel = meusImoveis.find(i => i.id === cliente.imovelId);
+    if (!imovel) return '#';
+
+    const startTime = new Date();
+    startTime.setHours(startTime.getHours() + 1); // Evento começa em 1 hora
+    const endTime = new Date(startTime.getTime() + (60 * 60 * 1000)); // Duração de 1 hora
+
+    const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, '');
+
+    const url = new URL('https://www.google.com/calendar/render?action=TEMPLATE');
+    url.searchParams.append('text', `Visita: ${cliente.imovelTitulo}`);
+    url.searchParams.append('dates', `${formatDate(startTime)}/${formatDate(endTime)}`);
+    url.searchParams.append('details', `Visita agendada com o cliente ${cliente.nomeCliente} para o imóvel "${cliente.imovelTitulo}".`);
+    url.searchParams.append('location', `${imovel.endereco.rua}, ${imovel.endereco.numero} - ${imovel.endereco.bairro}, ${imovel.endereco.cidade}`);
+
+    return url.href;
+  };
+
   const TransactionCard = ({ transacao }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     
@@ -452,6 +500,39 @@ function AdminPanel() {
             </form>
           </section>
         );
+        
+      case 'clientes':
+        return (
+          <section className="bg-white p-8 rounded-lg shadow-md">
+            <h2 className="text-2xl font-semibold mb-6">Meus Clientes</h2>
+            {loading ? <p>Carregando...</p> : (
+              <div className="space-y-4">
+                {transacoes.length > 0 ? (
+                  transacoes.map(cliente => (
+                    <div key={cliente.id} className="border border-gray-200 p-4 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg">{cliente.nomeCliente}</h3>
+                        <p className="text-gray-600 text-sm">{cliente.imovelTitulo}</p>
+                      </div>
+                      <div className="flex-shrink-0 flex items-center space-x-2 mt-4 sm:mt-0">
+                        <a href={`https://wa.me/${whatsapp}?text=Olá ${cliente.nomeCliente}, sobre o imóvel ${cliente.imovelTitulo}...`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center bg-green-500 text-white text-sm py-2 px-3 rounded-md hover:bg-green-600">
+                          <MessageSquare size={16} className="mr-2"/> WhatsApp
+                        </a>
+                        <button onClick={() => openInteractionModal(cliente)} className="inline-flex items-center bg-gray-200 text-gray-700 text-sm py-2 px-3 rounded-md hover:bg-gray-300">
+                          Registrar
+                        </button>
+                        <a href={generateGoogleCalendarLink(cliente)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center bg-blue-500 text-white text-sm py-2 px-3 rounded-md hover:bg-blue-600">
+                           <CalendarPlus size={16} className="mr-2"/> Agendar
+                        </a>
+                      </div>
+                    </div>
+                  ))
+                ) : <p className="text-center text-gray-500">Nenhum cliente em transações ativas.</p>}
+              </div>
+            )}
+          </section>
+        );
+
       default:
         return null;
     }
@@ -484,6 +565,9 @@ function AdminPanel() {
             <button onClick={() => setActiveTab('transacoes')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${ activeTab === 'transacoes' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
               Transações
             </button>
+            <button onClick={() => setActiveTab('clientes')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${ activeTab === 'clientes' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+              Clientes
+            </button>
             <button onClick={() => setActiveTab('meusImoveis')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${ activeTab === 'meusImoveis' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
               Meus Imóveis
             </button>
@@ -505,6 +589,14 @@ function AdminPanel() {
         onSave={handleSaveTransaction}
         meusImoveis={meusImoveis}
       />
+      
+      <InteractionModal
+        isOpen={isInteractionModalOpen}
+        onClose={closeInteractionModal}
+        onSave={handleSaveInteraction}
+        client={selectedClient}
+      />
+
     </div>
   );
 }

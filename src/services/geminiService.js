@@ -4,9 +4,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-// AJUSTE FINAL: Forçando o uso da API versão 'v1' para máxima estabilidade
-const genAI = new GoogleGenerativeAI(API_KEY, { apiVersion: 'v1' });
-
+// Vamos remover a especificação da versão e deixar a biblioteca usar o seu padrão (v1beta).
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 /**
  * Gera a descrição de um anúncio de imóvel usando a IA do Gemini.
@@ -14,8 +13,8 @@ const genAI = new GoogleGenerativeAI(API_KEY, { apiVersion: 'v1' });
  * @returns {Promise<string>} - A descrição do anúncio gerada pela IA.
  */
 export async function gerarDescricaoDeAnuncio(imovel) {
-  // Usando o modelo estável e recomendado pela sua pesquisa
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+  // AJUSTE FINAL: Usando o alias 'latest' para máxima compatibilidade.
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `
     Aja como um corretor de imóveis especialista em marketing digital.
@@ -52,6 +51,6 @@ export async function gerarDescricaoDeAnuncio(imovel) {
     if (error.message.includes('API key not valid')) {
         return "Erro: A chave da API do Gemini não é válida. Verifique o seu arquivo .env.local.";
     }
-    return "Ocorreu um erro ao tentar gerar a descrição. Verifique se a 'Generative Language API' está ativada no seu projeto Google Cloud.";
+    return "Ocorreu um erro ao tentar gerar a descrição. Verifique se a 'Generative Language API' está ativada e se uma conta de faturação está associada ao seu projeto Google Cloud.";
   }
 }

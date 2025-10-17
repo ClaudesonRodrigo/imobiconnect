@@ -3,9 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import WhatsappButton from '../components/WhatsappButton';
-import { BedDouble, Bath, Car, Ruler } from 'lucide-react'; // Ícones
+import { BedDouble, Bath, Car, Ruler, Heart } from 'lucide-react';
+// CORREÇÃO AQUI: Importando do arquivo correto
+import { useClientAuth } from '../contexts/ClientAuthContext';
+
 
 function DetalheImovel() {
   const { imovelId } = useParams();
@@ -14,6 +17,11 @@ function DetalheImovel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [fotoPrincipal, setFotoPrincipal] = useState(null);
+
+  const { clientUser, signInWithGoogle } = useClientAuth();
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isFavoriting, setIsFavoriting] = useState(false);
+
 
   useEffect(() => {
     const fetchImovel = async () => {
@@ -29,7 +37,6 @@ function DetalheImovel() {
             setFotoPrincipal(imovelData.fotos[0]);
           }
 
-          // Buscar dados do corretor
           if (imovelData.corretorId) {
             const corretorDocRef = doc(db, 'users', imovelData.corretorId);
             const corretorDocSnap = await getDoc(corretorDocRef);
@@ -51,6 +58,57 @@ function DetalheImovel() {
     fetchImovel();
   }, [imovelId]);
 
+  useEffect(() => {
+    if (!clientUser || !imovelId) {
+      setIsFavorited(false);
+      return;
+    }
+    const checkFavorite = async () => {
+      const favoriteRef = doc(db, 'clients', clientUser.uid, 'favorites', imovelId);
+      const favoriteSnap = await getDoc(favoriteRef);
+      setIsFavorited(favoriteSnap.exists());
+    };
+    checkFavorite();
+  }, [clientUser, imovelId]);
+  
+  const handleFavoriteClick = async () => {
+    setIsFavoriting(true);
+    let currentUser = clientUser;
+
+    if (!currentUser) {
+      currentUser = await signInWithGoogle();
+      if (!currentUser) {
+        setIsFavoriting(false);
+        return;
+      }
+    }
+    
+    const favoriteRef = doc(db, 'clients', currentUser.uid, 'favorites', imovelId);
+    
+    try {
+      if (isFavorited) {
+        await deleteDoc(favoriteRef);
+        setIsFavorited(false);
+      } else {
+        await setDoc(favoriteRef, {
+          imovelId: imovelId,
+          titulo: imovel.titulo,
+          foto: imovel.fotos?.[0] || '',
+          preco: imovel.preco,
+          corretorId: imovel.corretorId,
+          favoritedAt: new Date(),
+        });
+        setIsFavorited(true);
+      }
+    } catch (err) {
+      console.error("Erro ao salvar favorito:", err);
+      alert("Ocorreu um erro ao salvar seu favorito.");
+    } finally {
+      setIsFavoriting(false);
+    }
+  };
+
+
   if (loading) {
     return <p className="text-center text-gray-500 mt-8">Carregando detalhes do imóvel...</p>;
   }
@@ -60,14 +118,13 @@ function DetalheImovel() {
   }
 
   if (!imovel) {
-    return null; // ou uma página 404
+    return null;
   }
 
   return (
     <div className="bg-gray-100 min-h-screen">
       <div className="container mx-auto px-4 py-12">
         <main className="bg-white p-6 sm:p-8 rounded-lg shadow-lg">
-          {/* SEÇÃO DE MÍDIA */}
           <section className="mb-8">
             <div className="w-full aspect-w-16 aspect-h-9 rounded-lg overflow-hidden bg-gray-200 mb-4">
               {fotoPrincipal ? (
@@ -87,7 +144,6 @@ function DetalheImovel() {
             </div>
           </section>
 
-          {/* SEÇÃO DE INFORMAÇÕES */}
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
               <h1 className="text-4xl font-bold text-gray-800 mb-2">{imovel.titulo}</h1>
@@ -115,32 +171,43 @@ function DetalheImovel() {
               )}
             </div>
 
-            {/* BARRA LATERAL COM PREÇO E CORRETOR */}
             <aside className="lg:col-span-1">
               <div className="sticky top-8 bg-gray-50 p-6 rounded-lg shadow-md">
                 <p className="text-sm text-gray-600">{imovel.finalidade === 'venda' ? 'Preço de Venda' : 'Valor do Aluguel'}</p>
                 <p className="text-4xl font-extrabold text-green-600 mb-6">
                   R$ {Number(imovel.preco).toLocaleString('pt-BR')}
                 </p>
+
+                <button
+                  onClick={handleFavoriteClick}
+                  disabled={isFavoriting}
+                  className={`w-full flex items-center justify-center gap-2 text-center font-bold py-3 px-6 rounded-lg transition-colors mb-6 ${
+                    isFavorited
+                      ? 'bg-pink-100 text-pink-600 hover:bg-pink-200'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  <Heart size={20} fill={isFavorited ? 'currentColor' : 'none'} />
+                  {isFavorited ? 'Salvo como Favorito' : 'Salvar como Favorito'}
+                </button>
+
                 {corretor && (
-                  <>
-                    <div className="pt-6 border-t">
-                      <p className="text-sm font-medium text-gray-800 mb-4">Corretor Responsável</p>
-                      <Link to={`/corretor/${imovel.corretorId}`} className="flex items-center gap-4 group">
-                        {corretor.personalizacao?.logoUrl ? (
-                          <img src={corretor.personalizacao.logoUrl} alt={`Logo de ${corretor.nome}`} className="w-16 h-16 rounded-full object-cover"/>
-                        ) : (
-                          <div className="w-16 h-16 rounded-full bg-gray-300 flex items-center justify-center">
-                            <span className="text-sm text-gray-500">Sem Logo</span>
-                          </div>
-                        )}
-                        <div>
-                          <h3 className="font-bold text-lg text-gray-900 group-hover:underline">{corretor.nome}</h3>
-                          <p className="text-sm text-gray-600">{corretor.email}</p>
+                  <div className="pt-6 border-t">
+                    <p className="text-sm font-medium text-gray-800 mb-4">Corretor Responsável</p>
+                    <Link to={`/corretor/${imovel.corretorId}`} className="flex items-center gap-4 group">
+                      {corretor.personalizacao?.logoUrl ? (
+                        <img src={corretor.personalizacao.logoUrl} alt={`Logo de ${corretor.nome}`} className="w-16 h-16 rounded-full object-cover"/>
+                      ) : (
+                        <div className="w-16 h-16 rounded-full bg-gray-300 flex items-center justify-center">
+                          <span className="text-sm text-gray-500">Sem Logo</span>
                         </div>
-                      </Link>
-                    </div>
-                  </>
+                      )}
+                      <div>
+                        <h3 className="font-bold text-lg text-gray-900 group-hover:underline">{corretor.nome}</h3>
+                        <p className="text-sm text-gray-600">{corretor.email}</p>
+                      </div>
+                    </Link>
+                  </div>
                 )}
               </div>
             </aside>

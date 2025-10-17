@@ -1,11 +1,11 @@
-// Arquivo: src/services/firebaseConfig.js (VERSÃO FINAL E SEGURA)
+// src/services/firebaseConfig.js
 
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+// ATUALIZAÇÃO: Importe o GoogleAuthProvider
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
-// Agora a configuração lê as variáveis de ambiente
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -21,5 +21,7 @@ const analytics = getAnalytics(app);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// ATUALIZAÇÃO AQUI:
-export { db, auth, firebaseConfig };
+// ATUALIZAÇÃO: Exporte o provider do Google
+const googleProvider = new GoogleAuthProvider();
+
+export { db, auth, googleProvider, firebaseConfig };

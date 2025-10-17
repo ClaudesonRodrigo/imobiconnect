@@ -1,11 +1,11 @@
-// src/pages/ListaImoveis.jsx
+// src/pages/VitrineImoveis.jsx
 
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 
-function ListaImoveis() {
+function VitrineImoveis() {
   const [imoveis, setImoveis] = useState([]); 
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +47,6 @@ function ListaImoveis() {
                     <Link to={`/imovel/${imovel.id}`} key={imovel.id} className="block group">
                     <div className="bg-white rounded-lg shadow-lg overflow-hidden transform transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
                         
-                        {/* ATUALIZAÇÃO AQUI */}
                         <div className="w-full h-56 bg-gray-200 flex items-center justify-center overflow-hidden">
                           {imovel.fotos && imovel.fotos.length > 0 ? (
                             <img src={imovel.fotos[0]} alt={imovel.titulo} className="w-full h-full object-cover" />
@@ -73,4 +72,4 @@ function ListaImoveis() {
   );
 }
 
-export default ListaImoveis;
+export default VitrineImoveis;

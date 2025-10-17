@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConfig';
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+// ATUALIZAÇÃO: Importe 'collectionGroup' e 'getDoc'
+import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp, updateDoc, collectionGroup, getDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
-import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus, Sparkles } from 'lucide-react';
+// ATUALIZAÇÃO: Importe o ícone 'Users'
+import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus, Sparkles, Users } from 'lucide-react';
 import NovaTransacaoModal from '../components/NovaTransacaoModal';
 import InteractionModal from '../components/InteractionModal';
 import imageCompression from 'browser-image-compression';
@@ -33,7 +35,7 @@ const KANBAN_COLUMNS = [
 
 function AdminPanel() {
   const { currentUser, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState('transacoes');
+  const [activeTab, setActiveTab] = useState('meusLeads'); // ATUALIZAÇÃO: Aba inicial
   const [meusImoveis, setMeusImoveis] = useState([]);
   const [loading, setLoading] = useState(true);
   const [imovelData, setImovelData] = useState(initialState);
@@ -63,6 +65,9 @@ function AdminPanel() {
   const [generatedDesc, setGeneratedDesc] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // ATUALIZAÇÃO: State para os leads
+  const [leads, setLeads] = useState([]);
+
 
   useEffect(() => {
     if (!currentUser) return;
@@ -78,17 +83,50 @@ function AdminPanel() {
     }
     const fetchData = async () => {
       try {
+        // Busca Imóveis
         const imoveisQuery = query(collection(db, 'imoveis'), where("corretorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
         const imoveisSnapshot = await getDocs(imoveisQuery);
         const imoveisList = imoveisSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setMeusImoveis(imoveisList);
-        if (imoveisList.length > 0) {
+        if (imoveisList.length > 0 && !selectedImovelId) {
           setSelectedImovelId(imoveisList[0].id);
         }
 
+        // Busca Transações
         const transacoesQuery = query(collection(db, 'transacoes'), where("corretorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
         const transacoesSnapshot = await getDocs(transacoesQuery);
         setTransacoes(transacoesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        
+        // ATUALIZAÇÃO: Busca Leads (Clientes que favoritaram)
+        const favoritesQuery = query(
+          collectionGroup(db, 'favorites'),
+          where('corretorId', '==', currentUser.uid)
+        );
+        const favoritesSnapshot = await getDocs(favoritesQuery);
+        
+        const leadsData = {};
+        for (const favoriteDoc of favoritesSnapshot.docs) {
+          const favorite = favoriteDoc.data();
+          // O documento do cliente é o "pai" da subcoleção 'favorites'
+          const clientRef = favoriteDoc.ref.parent.parent; 
+          
+          if (clientRef) {
+            if (!leadsData[clientRef.id]) {
+               const clientSnap = await getDoc(clientRef);
+               if (clientSnap.exists()) {
+                 leadsData[clientRef.id] = {
+                   ...clientSnap.data(),
+                   favoritos: [],
+                 };
+               }
+            }
+            if(leadsData[clientRef.id]) {
+                leadsData[clientRef.id].favoritos.push(favorite);
+            }
+          }
+        }
+        setLeads(Object.values(leadsData));
+
       } catch (err) {
         console.error("Erro ao buscar dados do painel:", err);
       } finally {
@@ -98,7 +136,7 @@ function AdminPanel() {
     fetchData();
   }, [currentUser, forceUpdate]);
 
-  const handleSupportAccess = async (approved) => {
+    const handleSupportAccess = async (approved) => {
     if (!currentUser) return;
     const corretorDocRef = doc(db, 'users', currentUser.uid);
     try {
@@ -419,9 +457,60 @@ function AdminPanel() {
     );
   };
 
+
   const renderContent = () => {
     switch (activeTab) {
-        case 'copiloto':
+        case 'meusLeads':
+          return (
+            <section className="bg-white p-8 rounded-lg shadow-md">
+              <h2 className="text-3xl font-bold text-gray-800 mb-2">Clientes Interessados (Leads)</h2>
+              <p className="text-gray-600 mb-8">Aqui estão os clientes que salvaram um ou mais dos seus imóveis como favoritos.</p>
+              <div className="space-y-6">
+                {loading ? <p>Buscando leads...</p> : leads.length > 0 ? (
+                  leads.map(lead => (
+                    <div key={lead.uid} className="border border-gray-200 p-6 rounded-lg bg-gray-50">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                        <div className="flex items-center gap-4">
+                          <img src={lead.foto} alt={lead.nome} className="w-16 h-16 rounded-full"/>
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-800">{lead.nome}</h3>
+                            <p className="text-gray-500">{lead.email}</p>
+                          </div>
+                        </div>
+                        <a 
+                          href={`https://wa.me/${whatsapp}?text=Olá ${lead.nome}, vi que você se interessou por alguns dos meus imóveis. Vamos conversar?`} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="inline-flex items-center justify-center bg-green-500 text-white text-sm font-semibold py-2 px-4 rounded-md hover:bg-green-600 transition-colors w-full sm:w-auto"
+                        >
+                          <MessageSquare size={16} className="mr-2"/> Contatar no WhatsApp
+                        </a>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-700 mb-2">Imóveis Favoritados:</h4>
+                        <ul className="space-y-2">
+                          {lead.favoritos.sort((a,b) => b.favoritedAt.toDate() - a.favoritedAt.toDate()).map(fav => (
+                            <li key={fav.imovelId} className="flex items-center justify-between p-3 bg-white rounded-md border">
+                              <div className="flex items-center gap-3">
+                                <img src={fav.foto} alt={fav.titulo} className="w-12 h-12 object-cover rounded"/>
+                                <div>
+                                   <Link to={`/imovel/${fav.imovelId}`} target="_blank" className="font-semibold text-gray-800 hover:underline">{fav.titulo}</Link>
+                                   <p className="text-sm text-green-700 font-bold">R$ {Number(fav.preco).toLocaleString('pt-BR')}</p>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">Nenhum lead encontrado ainda. Continue divulgando sua vitrine para que os clientes possam favoritar seus imóveis!</p>
+                )}
+              </div>
+            </section>
+          );
+      case 'copiloto':
         return (
           <section className="bg-white p-8 rounded-lg shadow-md">
             <div className="text-center mb-8">
@@ -603,7 +692,7 @@ function AdminPanel() {
             </form>
           </section>
         );
-
+        
       case 'personalizacao':
         return (
           <section className="bg-white p-8 rounded-lg shadow-md">
@@ -720,6 +809,9 @@ function AdminPanel() {
 
         <div className="mb-8 border-b border-gray-200">
           <nav className="-mb-px flex space-x-6 overflow-x-auto">
+            <button onClick={() => setActiveTab('meusLeads')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 flex items-center gap-2 ${ activeTab === 'meusLeads' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+              <Users size={16}/> Meus Leads
+            </button>
             <button onClick={() => setActiveTab('copiloto')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 flex items-center gap-2 ${ activeTab === 'copiloto' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
               <Sparkles size={16}/> Copiloto IA
             </button>

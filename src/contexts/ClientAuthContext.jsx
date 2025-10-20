@@ -2,9 +2,9 @@
 
 import { createContext, useState, useEffect, useContext } from 'react';
 import { onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
-import { auth, googleProvider } from '../services/firebaseConfig';
+// ATUALIZAÇÃO FINAL: Importa o 'clientAuth' dedicado e o 'db'
+import { clientAuth, googleProvider, db } from '../services/firebaseConfig';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebaseConfig';
 
 const ClientAuthContext = createContext();
 
@@ -12,16 +12,17 @@ export function ClientAuthProvider({ children }) {
   const [clientUser, setClientUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Efeito que lida com o estado geral de autenticação
+  // Efeito que lida com o estado GERAL de autenticação do cliente
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    // Este listener ouve APENAS a instância de auth do cliente (`clientAuth`)
+    const unsubscribe = onAuthStateChanged(clientAuth, async (user) => {
+      setLoading(true);
       if (user) {
         const clientDocRef = doc(db, 'clients', user.uid);
         const clientDocSnap = await getDoc(clientDocRef);
         if (clientDocSnap.exists()) {
           setClientUser({ ...user, ...clientDocSnap.data() });
         }
-        // Se não for um cliente, o clientUser permanece null
       } else {
         setClientUser(null);
       }
@@ -30,48 +31,52 @@ export function ClientAuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // ATUALIZAÇÃO CRÍTICA: Efeito para capturar o resultado do redirecionamento
+  // Efeito que lida ESPECIFICAMENTE com o retorno do login via redirecionamento
   useEffect(() => {
     const handleRedirectResult = async () => {
+      setLoading(true);
       try {
-        const result = await getRedirectResult(auth);
+        // Captura o resultado da instância de auth do cliente (`clientAuth`)
+        const result = await getRedirectResult(clientAuth);
         if (result) {
-          // O usuário acabou de fazer login via redirecionamento
           const user = result.user;
           const userDocRef = doc(db, 'clients', user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-
-          // Se for o primeiro login do cliente, criamos o documento dele no Firestore
-          if (!userDocSnap.exists()) {
-            await setDoc(userDocRef, {
+          
+          const clientData = {
               uid: user.uid,
               nome: user.displayName,
               email: user.email,
               foto: user.photoURL,
               createdAt: new Date(),
-            });
-          }
-          // Após isso, o onAuthStateChanged acima irá detectar o usuário e definir o estado clientUser corretamente.
+          };
+          // Cria ou atualiza o documento do cliente no Firestore
+          await setDoc(userDocRef, clientData, { merge: true });
+          // Atualiza o estado local imediatamente
+          setClientUser({ ...user, ...clientData });
         }
       } catch (error) {
         console.error("Erro ao obter resultado do redirecionamento:", error);
+      } finally {
+         setLoading(false);
       }
     };
     
     handleRedirectResult();
-  }, []); // Executa apenas uma vez quando o componente é montado
+  }, []);
 
   const signInWithGoogle = async () => {
+    setLoading(true);
     try {
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithRedirect(clientAuth, googleProvider);
     } catch (error) {
       console.error("Erro ao iniciar redirecionamento com Google:", error);
+      setLoading(false);
     }
   };
 
   const clientSignOut = async () => {
     try {
-      await signOut(auth);
+      await signOut(clientAuth);
       setClientUser(null);
     } catch (error) {
       console.error("Erro no logout do cliente:", error);
@@ -87,7 +92,7 @@ export function ClientAuthProvider({ children }) {
 
   return (
     <ClientAuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </ClientAuthContext.Provider>
   );
 }

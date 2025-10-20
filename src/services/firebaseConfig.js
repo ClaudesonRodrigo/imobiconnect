@@ -1,9 +1,8 @@
 // src/services/firebaseConfig.js
 
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-// ATUALIZAÇÃO: Importe o GoogleAuthProvider
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
@@ -16,12 +15,22 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app);
-const auth = getAuth(app);
+// Inicializa o app principal (ou o obtém se já existir)
+const mainApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-// ATUALIZAÇÃO: Exporte o provider do Google
+// ATUALIZAÇÃO CRÍTICA: Cria um segundo app para autenticação do cliente
+const clientAppName = 'clientAuth';
+const clientApp = getApps().find(app => app.name === clientAppName) || initializeApp(firebaseConfig, clientAppName);
+
+const analytics = getAnalytics(mainApp);
+const db = getFirestore(mainApp);
+
+// Auth principal (para corretores e admin)
+const auth = getAuth(mainApp);
+
+// Auth secundário (APENAS para clientes)
+const clientAuth = getAuth(clientApp);
+
 const googleProvider = new GoogleAuthProvider();
 
-export { db, auth, googleProvider, firebaseConfig };
+export { db, auth, clientAuth, googleProvider, firebaseConfig };

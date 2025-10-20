@@ -2,6 +2,7 @@
 
 import { createContext, useState, useEffect, useContext } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
+// ATUALIZAÇÃO FINAL: Importamos a instância de auth principal
 import { auth, db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -12,19 +13,25 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Este listener observa a instância de auth principal (para corretores)
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         
-        // ATUALIZAÇÃO AQUI:
-        // Verifica se o usuário existe no Firestore E se o status não é 'inativo'
-        if (userDocSnap.exists() && userDocSnap.data().status !== 'inativo') {
+        // Apenas definimos o currentUser se ele for um corretor válido e ativo
+        if (userDocSnap.exists() && userDocSnap.data().role === 'corretor' && userDocSnap.data().status !== 'inativo') {
           setCurrentUser({ ...user, ...userDocSnap.data() });
-        } else {
-          // Se o usuário está inativo ou não existe no DB, força o logout.
+        } else if (userDocSnap.exists() && userDocSnap.data().role === 'superadmin') {
+           setCurrentUser({ ...user, ...userDocSnap.data() });
+        }
+        else {
+          // CORREÇÃO CRÍTICA:
+          // Se o usuário logado não é um corretor (ou seja, é um cliente),
+          // nós simplesmente NÃO FAZEMOS NADA.
+          // Não definimos o currentUser deste contexto e, mais importante,
+          // NÃO deslogamos o usuário. Isso deixa o ClientAuthContext livre para gerenciá-lo.
           setCurrentUser(null);
-          auth.signOut(); 
         }
       } else {
         setCurrentUser(null);

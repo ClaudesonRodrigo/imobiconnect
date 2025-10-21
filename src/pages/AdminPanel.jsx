@@ -223,19 +223,40 @@ function AdminPanel() {
   };
 
 
+  // src/pages/AdminPanel.jsx -> Apenas a função handleSubmit
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsUploading(true);
     try {
-      const photoUploadPromises = photoFiles.map(file => compressAndUploadFile(file));
+      // 1. Faz upload apenas dos arquivos novos (que não são URLs)
+      const photoUploadPromises = photoFiles.map(file => {
+        if (file instanceof File) {
+          return compressAndUploadFile(file);
+        }
+        return null; // Ignora slots vazios ou já preenchidos com URLs
+      });
+      
       const uploadedPhotoUrls = (await Promise.all(photoUploadPromises)).filter(Boolean);
       const videoUrl = await uploadFile(videoFile);
-      const existingPhotos = isEditing ? (imovelData.fotos || []).filter(url => !photoPreviews.includes(url) || uploadedPhotoUrls.includes(url)) : [];
-      const finalPhotoUrls = [...existingPhotos, ...uploadedPhotoUrls].filter((value, index, self) => self.indexOf(value) === index).slice(0, 5); // Garante no máximo 5 fotos
+
+      // 2. CORREÇÃO AQUI: Determina as fotos finais
+      let finalPhotoUrls = [];
+      if (isEditing) {
+        // Se está editando, pega as URLs que ainda estão nos previews
+        // (o usuário pode ter removido algumas)
+        finalPhotoUrls = photoPreviews.filter(preview => {
+          return preview && !preview.startsWith('blob:'); // Filtra apenas as URLs existentes
+        });
+      }
+      
+      // 3. Adiciona as novas fotos que acabaram de ser upadas
+      finalPhotoUrls = [...finalPhotoUrls, ...uploadedPhotoUrls].slice(0, 5); // Garante o limite de 5
+
       const dataToSave = {
         ...imovelData,
         preco: Number(imovelData.preco),
-        fotos: finalPhotoUrls,
+        fotos: finalPhotoUrls, // 4. Salva o array de fotos corrigido
         videoUrl: videoUrl || imovelData.videoUrl || '',
         caracteristicas: {
           quartos: Number(imovelData.caracteristicas.quartos) || 0,
@@ -245,6 +266,7 @@ function AdminPanel() {
           areaTotal: Number(imovelData.caracteristicas.areaTotal) || 0,
         },
       };
+
       if (isEditing) {
         await updateDoc(doc(db, 'imoveis', editingId), dataToSave);
         alert("Imóvel atualizado!");

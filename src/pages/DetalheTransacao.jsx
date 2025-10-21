@@ -1,231 +1,203 @@
-// src/pages/DetalheImovel.jsx
+// src/pages/DetalheTransacao.jsx
 
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { db } from '../services/firebaseConfig';
-import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import WhatsappButton from '../components/WhatsappButton';
-import { BedDouble, Bath, Car, Ruler, Heart } from 'lucide-react';
-import { useClientAuth } from '../contexts/ClientAuthContext';
+import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, getDocs, orderBy, query, deleteDoc } from 'firebase/firestore';
+import { CheckCircle2, Circle, Loader, UploadCloud, FileText, Trash2 } from 'lucide-react';
 
-function DetalheImovel() {
-  const { imovelId } = useParams();
-  const [imovel, setImovel] = useState(null);
-  const [corretor, setCorretor] = useState(null);
+function DetalheTransacao() {
+  const { transacaoId } = useParams();
+  const [transacao, setTransacao] = useState(null);
+  const [documentos, setDocumentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [fotoPrincipal, setFotoPrincipal] = useState(null);
+  const [arquivo, setArquivo] = useState(null);
+  const [nomeArquivo, setNomeArquivo] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
-  const { clientUser, signInWithGoogle, loading: clientAuthLoading } = useClientAuth();
-  const [isFavorited, setIsFavorited] = useState(false);
-  const [isFavoriting, setIsFavoriting] = useState(false);
-
-  // Função para favoritar, agora separada para ser reutilizável
-  const runFavoriteAction = async (user) => {
-    if (!user || isFavoriting) return;
-
-    setIsFavoriting(true);
-    const favoriteRef = doc(db, 'clients', user.uid, 'favorites', imovelId);
-    
+  const uploadFile = async (file) => {
+    if (!file) return null;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+    const resourceType = file.type.startsWith('video') ? 'video' : (file.type.startsWith('image') ? 'image' : 'raw');
+    const apiUrl = `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
     try {
-      if (isFavorited) {
-        await deleteDoc(favoriteRef);
-        setIsFavorited(false);
+      const response = await fetch(apiUrl, { method: 'POST', body: formData });
+      const data = await response.json();
+      return data.secure_url;
+    } catch (error) {
+      console.error('Erro no upload:', error);
+      return null;
+    }
+  };
+
+  const fetchDados = async () => {
+    try {
+      setLoading(true);
+      const transacaoDocRef = doc(db, 'transacoes', transacaoId);
+      const transacaoDocSnap = await getDoc(transacaoDocRef);
+      if (transacaoDocSnap.exists()) {
+        setTransacao({ id: transacaoDocSnap.id, ...transacaoDocSnap.data() });
       } else {
-        await setDoc(favoriteRef, {
-          imovelId: imovelId,
-          titulo: imovel.titulo,
-          foto: imovel.fotos?.[0] || '',
-          preco: imovel.preco,
-          corretorId: imovel.corretorId,
-          favoritedAt: new Date(),
-        });
-        setIsFavorited(true);
+        setError("Transação não encontrada.");
+        setLoading(false);
+        return;
       }
+      const documentosQuery = query(collection(db, 'transacoes', transacaoId, 'documentos'), orderBy('createdAt', 'desc'));
+      const documentosSnapshot = await getDocs(documentosQuery);
+      const documentosList = documentosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setDocumentos(documentosList);
     } catch (err) {
-      console.error("Erro ao salvar favorito:", err);
-      alert("Ocorreu um erro ao salvar seu favorito.");
+      console.error("Erro ao buscar dados:", err);
+      setError("Ocorreu um erro ao carregar os dados.");
     } finally {
-      setIsFavoriting(false);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDados();
+  }, [transacaoId]);
+  
+  const handleFileUpload = async () => {
+    if (!arquivo || !nomeArquivo) {
+      alert("Por favor, selecione um arquivo e dê um nome a ele.");
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const fileUrl = await uploadFile(arquivo);
+      if (!fileUrl) throw new Error("Falha no upload do arquivo.");
+      const documentosCollectionRef = collection(db, 'transacoes', transacaoId, 'documentos');
+      await addDoc(documentosCollectionRef, {
+        nomeArquivo: nomeArquivo,
+        url: fileUrl,
+        enviadoPor: 'corretor',
+        createdAt: serverTimestamp(),
+      });
+      setArquivo(null);
+      setNomeArquivo('');
+      fetchDados();
+    } catch (error) {
+      console.error("Erro ao enviar documento:", error);
+      alert("Ocorreu um erro ao enviar o documento.");
+    } finally {
+      setIsUploading(false);
     }
   };
   
-  // Efeito principal que busca dados do imóvel
-  useEffect(() => {
-    const fetchImovel = async () => {
-      setLoading(true);
+  const handleDeleteDocumento = async (documentoId) => {
+    if (window.confirm("Tem certeza que deseja apagar este documento?")) {
       try {
-        const imovelDocRef = doc(db, 'imoveis', imovelId);
-        const imovelDocSnap = await getDoc(imovelDocRef);
-        if (imovelDocSnap.exists()) {
-          const imovelData = { id: imovelDocSnap.id, ...imovelDocSnap.data() };
-          setImovel(imovelData);
-          if (imovelData.fotos && imovelData.fotos.length > 0) {
-            setFotoPrincipal(imovelData.fotos[0]);
-          }
-          if (imovelData.corretorId) {
-            const corretorDocRef = doc(db, 'users', imovelData.corretorId);
-            const corretorDocSnap = await getDoc(corretorDocRef);
-            if (corretorDocSnap.exists()) {
-              setCorretor(corretorDocSnap.data());
-            }
-          }
-        } else {
-          setError("Imóvel não encontrado.");
-        }
-      } catch (err) {
-        setError("Ocorreu um erro ao carregar os detalhes do imóvel.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchImovel();
-  }, [imovelId]);
-
-  // Efeito que verifica o status do favorito
-  useEffect(() => {
-    if (!clientUser || !imovelId) {
-      setIsFavorited(false);
-      return;
-    }
-    const checkFavorite = async () => {
-      const favoriteRef = doc(db, 'clients', clientUser.uid, 'favorites', imovelId);
-      const favoriteSnap = await getDoc(favoriteRef);
-      setIsFavorited(favoriteSnap.exists());
-    };
-    checkFavorite();
-  }, [clientUser, imovelId]);
-
-  // ATUALIZAÇÃO: Efeito que lida com o pós-login
-  useEffect(() => {
-    // Roda somente quando a autenticação do cliente terminar de carregar e tivermos um usuário
-    if (!clientAuthLoading && clientUser && imovel) {
-      const pendingFavorite = sessionStorage.getItem('pendingFavorite');
-      if (pendingFavorite === imovelId) {
-        sessionStorage.removeItem('pendingFavorite');
-        // Favorita o imóvel automaticamente
-        runFavoriteAction(clientUser);
+        const docRef = doc(db, 'transacoes', transacaoId, 'documentos', documentoId);
+        await deleteDoc(docRef);
+        fetchDados();
+      } catch (error) {
+        console.error("Erro ao apagar documento:", error);
+        alert("Falha ao apagar o documento.");
       }
     }
-  }, [clientAuthLoading, clientUser, imovel, imovelId]);
+  };
 
-  // ATUALIZAÇÃO: Lógica de clique agora usa sessionStorage
-  const handleFavoriteClick = async () => {
-    if (clientUser) {
-      runFavoriteAction(clientUser);
-    } else {
-      // Salva a intenção de favoritar e inicia o login
-      sessionStorage.setItem('pendingFavorite', imovelId);
-      await signInWithGoogle();
+  const toggleEtapaStatus = async (index) => {
+    if (!transacao) return;
+    const novasEtapas = [...transacao.etapas];
+    const etapaAtual = novasEtapas[index];
+    etapaAtual.status = etapaAtual.status === 'concluido' ? 'pendente' : 'concluido';
+    setTransacao(prev => ({ ...prev, etapas: novasEtapas }));
+    try {
+      const transacaoDocRef = doc(db, 'transacoes', transacaoId);
+      await updateDoc(transacaoDocRef, { etapas: novasEtapas });
+    } catch (error) {
+      console.error("Erro ao atualizar etapa:", error);
+      novasEtapas[index].status = novasEtapas[index].status === 'concluido' ? 'pendente' : 'concluido';
+      setTransacao(prev => ({ ...prev, etapas: novasEtapas }));
+      alert("Falha ao atualizar o status da etapa.");
     }
   };
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-8">Carregando detalhes do imóvel...</p>;
+    return <div className="flex justify-center items-center h-screen"><Loader className="animate-spin" size={48} /></div>;
   }
   if (error) {
-    return <p className="text-center text-red-500 mt-8">Erro: {error}</p>;
+    return <p className="text-center text-red-500 mt-8">{error}</p>;
   }
-  if (!imovel) {
-    return null;
+  if (!transacao) {
+    return <p className="text-center text-gray-500 mt-8">Nenhuma transação encontrada.</p>;
   }
+
+  const etapasConcluidas = transacao.etapas.filter(e => e.status === 'concluido').length;
+  const progresso = (etapasConcluidas / transacao.etapas.length) * 100;
 
   return (
-    <div className="bg-gray-100 min-h-screen">
+    <div className="bg-gray-50 min-h-screen">
       <div className="container mx-auto px-4 py-12">
-        <main className="bg-white p-6 sm:p-8 rounded-lg shadow-lg">
-          <section className="mb-8">
-            <div className="w-full aspect-w-16 aspect-h-9 rounded-lg overflow-hidden bg-gray-200 mb-4">
-              {fotoPrincipal ? (
-                <img src={fotoPrincipal} alt="Foto principal do imóvel" className="w-full h-full object-cover"/>
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <span className="text-gray-500">Sem foto principal</span>
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-5 gap-2">
-              {imovel.fotos && imovel.fotos.map((foto, index) => (
-                <div key={index} className="aspect-w-1 aspect-h-1 cursor-pointer rounded overflow-hidden" onClick={() => setFotoPrincipal(foto)}>
-                  <img src={foto} alt={`Thumbnail ${index + 1}`} className={`w-full h-full object-cover transition-opacity duration-200 ${foto === fotoPrincipal ? 'opacity-100 ring-2 ring-indigo-500' : 'opacity-60 hover:opacity-100'}`} />
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-              <h1 className="text-4xl font-bold text-gray-800 mb-2">{imovel.titulo}</h1>
-              <p className="text-lg text-gray-500 mb-6">{imovel.endereco.bairro}, {imovel.endereco.cidade}</p>
-              
-              <div className="flex flex-wrap items-center gap-6 text-gray-600 mb-6 pb-6 border-b">
-                  <div className="flex items-center gap-2"><BedDouble size={20} /><span>{imovel.caracteristicas.quartos} Quartos</span></div>
-                  <div className="flex items-center gap-2"><Bath size={20} /><span>{imovel.caracteristicas.banheiros} Banheiros</span></div>
-                  <div className="flex items-center gap-2"><Car size={20} /><span>{imovel.caracteristicas.vagasGaragem} Vagas</span></div>
-                  <div className="flex items-center gap-2"><Ruler size={20} /><span>{imovel.caracteristicas.areaTotal} m²</span></div>
+        <div className="mb-8">
+          <Link to="/admin" className="text-indigo-600 hover:underline text-sm mb-2 inline-block">← Voltar para Transações</Link>
+          <p className="text-indigo-600 font-semibold">{transacao.tipoProcesso}</p>
+          <h1 className="text-4xl font-bold text-gray-800">{transacao.nomeCliente}</h1>
+          <Link to={`/imovel/${transacao.imovelId}`} className="text-gray-500 hover:underline">{transacao.imovelTitulo}</Link>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <div className="bg-white p-8 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-2">Checklist de Etapas</h2>
+              <p className="text-sm text-gray-500 mb-6">Clique em uma etapa para marcar como concluída ou pendente.</p>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+                <div className="bg-green-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progresso}%` }}></div>
               </div>
-
-              <h2 className="text-2xl font-semibold text-gray-800 mb-4">Descrição</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">{imovel.descricao || "Nenhuma descrição fornecida."}</p>
-              
-              {imovel.videoUrl && (
-                <div className="mt-8">
-                  <h2 className="text-2xl font-semibold text-gray-800 mb-4">Vídeo do Imóvel</h2>
-                  <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
-                    <video src={imovel.videoUrl} controls className="w-full h-full">
-                      Seu navegador não suporta o player de vídeo.
-                    </video>
+              <div className="space-y-4">
+                {transacao.etapas.map((etapa, index) => (
+                  <div key={index} onClick={() => toggleEtapaStatus(index)} className={`p-4 border rounded-lg flex items-center cursor-pointer transition-all ${etapa.status === 'concluido' ? 'bg-green-50 border-green-200' : 'bg-white hover:bg-gray-50'}`}>
+                    {etapa.status === 'concluido' ? <CheckCircle2 size={24} className="text-green-500 mr-4 flex-shrink-0" /> : <Circle size={24} className="text-gray-300 mr-4 flex-shrink-0" />}
+                    <span className={`font-medium ${etapa.status === 'concluido' ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{etapa.nome}</span>
                   </div>
-                </div>
-              )}
-            </div>
-
-            <aside className="lg:col-span-1">
-              <div className="sticky top-8 bg-gray-50 p-6 rounded-lg shadow-md">
-                <p className="text-sm text-gray-600">{imovel.finalidade === 'venda' ? 'Preço de Venda' : 'Valor do Aluguel'}</p>
-                <p className="text-4xl font-extrabold text-green-600 mb-6">
-                  R$ {Number(imovel.preco).toLocaleString('pt-BR')}
-                </p>
-
-                <button
-                  onClick={handleFavoriteClick}
-                  disabled={isFavoriting}
-                  className={`w-full flex items-center justify-center gap-2 text-center font-bold py-3 px-6 rounded-lg transition-colors mb-6 ${
-                    isFavorited
-                      ? 'bg-pink-100 text-pink-600 hover:bg-pink-200'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  <Heart size={20} fill={isFavorited ? 'currentColor' : 'none'} />
-                  {isFavorited ? 'Salvo como Favorito' : 'Salvar como Favorito'}
-                </button>
-
-                {corretor && (
-                  <div className="pt-6 border-t">
-                    <p className="text-sm font-medium text-gray-800 mb-4">Corretor Responsável</p>
-                    <Link to={`/corretor/${imovel.corretorId}`} className="flex items-center gap-4 group">
-                      {corretor.personalizacao?.logoUrl ? (
-                        <img src={corretor.personalizacao.logoUrl} alt={`Logo de ${corretor.nome}`} className="w-16 h-16 rounded-full object-cover"/>
-                      ) : (
-                        <div className="w-16 h-16 rounded-full bg-gray-300 flex items-center justify-center">
-                          <span className="text-sm text-gray-500">Sem Logo</span>
-                        </div>
-                      )}
-                      <div>
-                        <h3 className="font-bold text-lg text-gray-900 group-hover:underline">{corretor.nome}</h3>
-                        <p className="text-sm text-gray-600">{corretor.email}</p>
-                      </div>
-                    </Link>
-                  </div>
-                )}
+                ))}
               </div>
-            </aside>
-          </section>
-        </main>
-        {corretor && <WhatsappButton phoneNumber={corretor.personalizacao?.whatsapp} />}
+            </div>
+          </div>
+          <div className="lg:col-span-1">
+             <div className="bg-white p-8 rounded-lg shadow-md sticky top-8 space-y-6">
+                <h2 className="text-2xl font-semibold text-gray-800">Documentos</h2>
+                <div className="space-y-4 p-4 border-2 border-dashed rounded-lg">
+                  <h3 className="font-medium text-gray-700">Adicionar Novo Documento</h3>
+                  <div>
+                    <label htmlFor="nomeArquivo" className="block text-xs font-medium text-gray-600">Nome/Descrição do Arquivo</label>
+                    <input type="text" id="nomeArquivo" value={nomeArquivo} onChange={(e) => setNomeArquivo(e.target.value)} placeholder="Ex: RG e CPF do Cliente" className="mt-1 block w-full text-sm rounded-md border-gray-300 shadow-sm"/>
+                  </div>
+                  <div>
+                    <label htmlFor="fileUpload" className="block text-xs font-medium text-gray-600">Selecione o arquivo</label>
+                    <input id="fileUpload" type="file" onChange={(e) => setArquivo(e.target.files[0])} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                  </div>
+                  <button onClick={handleFileUpload} disabled={isUploading} className="w-full inline-flex justify-center items-center bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 disabled:bg-gray-400">
+                    {isUploading ? <Loader className="animate-spin mr-2"/> : <UploadCloud size={16} className="mr-2"/>}
+                    {isUploading ? 'Enviando...' : 'Enviar'}
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-gray-700">Documentos Anexados</h3>
+                  {documentos.length > 0 ? documentos.map(docItem => (
+                    <div key={docItem.id} className="border rounded-md p-3 flex justify-between items-center">
+                      <a href={docItem.url} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-3 group">
+                        <FileText className="text-gray-400 group-hover:text-indigo-600"/>
+                        <span className="text-sm font-medium text-gray-800 group-hover:underline">{docItem.nomeArquivo}</span>
+                      </a>
+                      <button onClick={() => handleDeleteDocumento(docItem.id)} className="text-gray-400 hover:text-red-500">
+                        <Trash2 size={16}/>
+                      </button>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-gray-400 text-center py-4">Nenhum documento anexado.</p>
+                  )}
+                </div>
+             </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-export default DetalheImovel;
+export default DetalheTransacao;

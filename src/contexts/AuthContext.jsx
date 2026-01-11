@@ -2,7 +2,6 @@
 
 import { createContext, useState, useEffect, useContext } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-// ATUALIZAÇÃO FINAL: Importamos a instância de auth principal
 import { auth, db } from '../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -13,32 +12,43 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Este listener observa a instância de auth principal (para corretores)
+    // Flag de montagem para evitar vazamento de memória ou erros de 'unmounted component'
+    let isMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        
-        // Apenas definimos o currentUser se ele for um corretor válido e ativo
-        if (userDocSnap.exists() && userDocSnap.data().role === 'corretor' && userDocSnap.data().status !== 'inativo') {
-          setCurrentUser({ ...user, ...userDocSnap.data() });
-        } else if (userDocSnap.exists() && userDocSnap.data().role === 'superadmin') {
-           setCurrentUser({ ...user, ...userDocSnap.data() });
+      try {
+        if (user) {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          
+          // Verifica se o componente ainda está montado antes de atualizar o estado
+          if (isMounted) {
+            if (userDocSnap.exists() && 
+               (userDocSnap.data().role === 'corretor' || userDocSnap.data().role === 'superadmin') && 
+               userDocSnap.data().status !== 'inativo') {
+              
+              setCurrentUser({ ...user, ...userDocSnap.data() });
+            } else {
+              // Usuário existe no Auth mas não é corretor/admin ou está inativo
+              setCurrentUser(null);
+            }
+          }
+        } else {
+          if (isMounted) setCurrentUser(null);
         }
-        else {
-          // CORREÇÃO CRÍTICA:
-          // Se o usuário logado não é um corretor (ou seja, é um cliente),
-          // nós simplesmente NÃO FAZEMOS NADA.
-          // Não definimos o currentUser deste contexto e, mais importante,
-          // NÃO deslogamos o usuário. Isso deixa o ClientAuthContext livre para gerenciá-lo.
-          setCurrentUser(null);
-        }
-      } else {
-        setCurrentUser(null);
+      } catch (error) {
+        console.error("Erro ao verificar autenticação:", error);
+        if (isMounted) setCurrentUser(null);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     });
-    return unsubscribe;
+
+    // Função de limpeza
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const value = {
@@ -48,7 +58,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children} 
     </AuthContext.Provider>
   );
 }

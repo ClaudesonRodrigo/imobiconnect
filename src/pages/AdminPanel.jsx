@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConfig';
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp, updateDoc, collectionGroup, getDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
-import { UploadCloud, X, ShieldAlert, Briefcase, PlusCircle, MoreVertical, MessageSquare, CalendarPlus, Sparkles, Users } from 'lucide-react';
+import { UploadCloud, X, ShieldAlert, PlusCircle, MoreVertical, MessageSquare, CalendarPlus, Sparkles, Users, Copy, Check, Share2 } from 'lucide-react';
 import NovaTransacaoModal from '../components/NovaTransacaoModal';
 import InteractionModal from '../components/InteractionModal';
 import imageCompression from 'browser-image-compression';
@@ -16,12 +16,11 @@ const initialState = {
   descricao: '',
   tipo: 'casa',
   finalidade: 'venda',
-  preco: 0,
+  preco: 0, // Armazenamos como Number puro (float)
   status: 'disponivel',
   endereco: { rua: '', numero: '', bairro: '', cidade: '', cep: '' },
   caracteristicas: { quartos: 0, suites: 0, banheiros: 0, vagasGaragem: 0, areaTotal: 0 },
   fotos: [],
-  videoUrl: ''
 };
 
 const KANBAN_COLUMNS = [
@@ -41,7 +40,6 @@ function AdminPanel() {
   const [editingId, setEditingId] = useState(null);
   const [forceUpdate, setForceUpdate] = useState(false);
   const [photoFiles, setPhotoFiles] = useState(Array(5).fill(null));
-  const [videoFile, setVideoFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [photoPreviews, setPhotoPreviews] = useState(Array(5).fill(null));
   
@@ -63,7 +61,8 @@ function AdminPanel() {
   const [generatedDesc, setGeneratedDesc] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [leads, setLeads] = useState([]);
-
+  
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -113,20 +112,17 @@ function AdminPanel() {
                }
             }
             if(leadsData[clientRef.id]) {
-                // Certifica que 'favoritedAt' é um objeto Date para ordenação
                 const favoritedAtDate = favorite.favoritedAt?.toDate ? favorite.favoritedAt.toDate() : new Date(0);
                 leadsData[clientRef.id].favoritos.push({...favorite, favoritedAt: favoritedAtDate});
             }
           }
         }
-         // Ordena os leads por data de criação (mais recentes primeiro)
         const sortedLeads = Object.values(leadsData).sort((a, b) => {
              const lastFavoriteA = a.favoritos.reduce((latest, fav) => fav.favoritedAt > latest ? fav.favoritedAt : latest, new Date(0));
              const lastFavoriteB = b.favoritos.reduce((latest, fav) => fav.favoritedAt > latest ? fav.favoritedAt : latest, new Date(0));
              return lastFavoriteB - lastFavoriteA;
         });
         setLeads(sortedLeads);
-
 
       } catch (err) {
         console.error("Erro ao buscar dados do painel:", err);
@@ -137,8 +133,14 @@ function AdminPanel() {
     fetchData();
   }, [currentUser, forceUpdate]);
 
-  // --- Funções handle... (permanecem as mesmas) ---
-    const handleSupportAccess = async (approved) => {
+  // --- Funções Auxiliares ---
+
+  // Helper para formatar moeda na EXIBIÇÃO
+  const formatMoney = (value) => {
+    return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const handleSupportAccess = async (approved) => {
     if (!currentUser) return;
     const corretorDocRef = doc(db, 'users', currentUser.uid);
     try {
@@ -186,13 +188,27 @@ function AdminPanel() {
     }
   };
 
+  // Handler ESPECÍFICO para o Preço (Máscara estilo ATM)
+  const handlePriceChange = (e) => {
+    let value = e.target.value;
+    // 1. Remove tudo que não for dígito
+    value = value.replace(/\D/g, "");
+    
+    // 2. Converte para número e divide por 100 para considerar os centavos
+    const numberValue = Number(value) / 100;
+
+    setImovelData(prev => ({
+      ...prev,
+      preco: numberValue
+    }));
+  };
+
   const uploadFile = async (file) => {
     if (!file) return null;
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
-    const resourceType = file.type.startsWith('video') ? 'video' : 'image';
-    const apiUrl = `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
+    const apiUrl = `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`;
     try {
       const response = await fetch(apiUrl, { method: 'POST', body: formData });
       const data = await response.json();
@@ -205,59 +221,48 @@ function AdminPanel() {
   
   const compressAndUploadFile = async (file) => {
     if (!file) return null;
-    if (!file.type.startsWith('image')) {
-      return uploadFile(file);
-    }
     const options = {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1920,
+      maxSizeMB: 0.8,
+      maxWidthOrHeight: 1280,
       useWebWorker: true,
+      initialQuality: 0.8
     }
     try {
       const compressedFile = await imageCompression(file, options);
       return uploadFile(compressedFile);
     } catch (error) {
-      console.error('Erro na compressão:', error);
+      console.error('Erro na compressão, enviando original:', error);
       return uploadFile(file);
     }
   };
-
-
-  // src/pages/AdminPanel.jsx -> Apenas a função handleSubmit
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsUploading(true);
     try {
-      // 1. Faz upload apenas dos arquivos novos (que não são URLs)
       const photoUploadPromises = photoFiles.map(file => {
         if (file instanceof File) {
           return compressAndUploadFile(file);
         }
-        return null; // Ignora slots vazios ou já preenchidos com URLs
+        return null;
       });
       
       const uploadedPhotoUrls = (await Promise.all(photoUploadPromises)).filter(Boolean);
-      const videoUrl = await uploadFile(videoFile);
 
-      // 2. CORREÇÃO AQUI: Determina as fotos finais
       let finalPhotoUrls = [];
       if (isEditing) {
-        // Se está editando, pega as URLs que ainda estão nos previews
-        // (o usuário pode ter removido algumas)
         finalPhotoUrls = photoPreviews.filter(preview => {
-          return preview && !preview.startsWith('blob:'); // Filtra apenas as URLs existentes
+          return preview && !preview.startsWith('blob:');
         });
       }
       
-      // 3. Adiciona as novas fotos que acabaram de ser upadas
-      finalPhotoUrls = [...finalPhotoUrls, ...uploadedPhotoUrls].slice(0, 5); // Garante o limite de 5
+      finalPhotoUrls = [...finalPhotoUrls, ...uploadedPhotoUrls].slice(0, 5);
 
       const dataToSave = {
         ...imovelData,
-        preco: Number(imovelData.preco),
-        fotos: finalPhotoUrls, // 4. Salva o array de fotos corrigido
-        videoUrl: videoUrl || imovelData.videoUrl || '',
+        // Garante que é número, embora já estejamos guardando como número
+        preco: Number(imovelData.preco), 
+        fotos: finalPhotoUrls,
         caracteristicas: {
           quartos: Number(imovelData.caracteristicas.quartos) || 0,
           suites: Number(imovelData.caracteristicas.suites) || 0,
@@ -269,17 +274,17 @@ function AdminPanel() {
 
       if (isEditing) {
         await updateDoc(doc(db, 'imoveis', editingId), dataToSave);
-        alert("Imóvel atualizado!");
+        alert("Imóvel atualizado com sucesso!");
       } else {
         await addDoc(collection(db, "imoveis"), { ...dataToSave, createdAt: serverTimestamp(), corretorId: currentUser.uid });
-        alert(`Imóvel cadastrado!`);
+        alert(`Imóvel cadastrado com sucesso!`);
       }
       handleCancelEdit();
       setForceUpdate(prev => !prev);
       setActiveTab('meusImoveis');
     } catch (error) {
       console.error("Erro ao salvar imóvel: ", error);
-      alert("Ocorreu um erro.");
+      alert("Ocorreu um erro ao salvar.");
     } finally {
       setIsUploading(false);
     }
@@ -301,18 +306,15 @@ function AdminPanel() {
     const newPreviews = [...photoPreviews];
     const newFiles = [...photoFiles];
     
-    // Remove a preview e o arquivo da posição `index`
     const removedPreview = newPreviews.splice(index, 1)[0];
     newFiles.splice(index, 1);
 
-    // Adiciona null no final para manter o array com 5 posições
     newPreviews.push(null);
     newFiles.push(null);
 
     setPhotoPreviews(newPreviews);
     setPhotoFiles(newFiles);
 
-    // Se estiver editando e a foto removida era uma existente (URL), atualiza o estado
      if (isEditing && removedPreview && !removedPreview.startsWith('blob:')) {
        const updatedPhotos = (imovelData.fotos || []).filter(url => url !== removedPreview);
        setImovelData(prev => ({ ...prev, fotos: updatedPhotos }));
@@ -322,14 +324,12 @@ function AdminPanel() {
   const handleEdit = (imovel) => {
     setIsEditing(true);
     setEditingId(imovel.id);
-    // Garante que todos os campos existam antes de setar o estado
      const dataToEdit = {
-       ...initialState, // Começa com a estrutura completa
-       ...imovel,       // Sobrescreve com os dados do imóvel
+       ...initialState,
+       ...imovel,
        endereco: { ...initialState.endereco, ...(imovel.endereco || {}) },
        caracteristicas: { ...initialState.caracteristicas, ...(imovel.caracteristicas || {}) },
        fotos: imovel.fotos || [],
-       videoUrl: imovel.videoUrl || '',
      };
     setImovelData(dataToEdit);
     
@@ -339,7 +339,6 @@ function AdminPanel() {
     }
     setPhotoPreviews(previews);
     setPhotoFiles(Array(5).fill(null));
-    setVideoFile(null);
     setActiveTab('cadastrar');
     window.scrollTo(0, 0);
   };
@@ -349,9 +348,7 @@ function AdminPanel() {
     setEditingId(null);
     setImovelData(initialState);
     setPhotoFiles(Array(5).fill(null));
-    setVideoFile(null);
     setPhotoPreviews(Array(5).fill(null));
-    // Não muda de aba ao cancelar
   };
 
   const handleDelete = async (imovelId) => {
@@ -361,6 +358,32 @@ function AdminPanel() {
         alert("Imóvel apagado!");
         setForceUpdate(prev => !prev);
       } catch (err) { alert("Erro ao apagar."); }
+    }
+  };
+  
+  const handleCopyLink = () => {
+    if (!currentUser) return;
+    const url = `${window.location.origin}/corretor/${currentUser.uid}`;
+    navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+  
+  const handleShareLink = async () => {
+    if (!currentUser) return;
+    const url = `${window.location.origin}/corretor/${currentUser.uid}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Imóveis de ${currentUser.name || 'Corretor'}`,
+          text: 'Confira minha carteira de imóveis!',
+          url: url,
+        });
+      } catch (err) {
+        console.error("Erro ao compartilhar", err);
+      }
+    } else {
+      handleCopyLink();
     }
   };
 
@@ -386,7 +409,6 @@ function AdminPanel() {
       }, { merge: true });
       alert("Personalização salva!");
       setLogoFile(null);
-       // Atualiza currentUser localmente para refletir a nova logo imediatamente
        if(logoUrl) {
          currentUser.personalizacao = { ...(currentUser.personalizacao || {}), logoUrl: logoUrl };
        }
@@ -426,7 +448,6 @@ function AdminPanel() {
   }
   
   const generateGoogleCalendarLink = (cliente) => {
-     // Acessa o imóvel relacionado à transação/cliente
      const imovel = meusImoveis.find(i => i.id === cliente.imovelId);
      if (!imovel) return '#';
 
@@ -440,7 +461,6 @@ function AdminPanel() {
     url.searchParams.append('text', `Visita: ${cliente.imovelTitulo}`);
     url.searchParams.append('dates', `${formatDate(startTime)}/${formatDate(endTime)}`);
     url.searchParams.append('details', `Visita agendada com o cliente ${cliente.nomeCliente} para o imóvel "${cliente.imovelTitulo}".`);
-     // Usa o endereço do imóvel encontrado
      if (imovel.endereco) {
        url.searchParams.append('location', `${imovel.endereco.rua || ''}, ${imovel.endereco.numero || ''} - ${imovel.endereco.bairro || ''}, ${imovel.endereco.cidade || ''}`);
      }
@@ -542,7 +562,7 @@ function AdminPanel() {
                                 <img src={fav.foto} alt={fav.titulo} className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded flex-shrink-0"/>
                                 <div className="min-w-0">
                                    <Link to={`/imovel/${fav.imovelId}`} target="_blank" className="font-semibold text-gray-800 hover:underline text-sm sm:text-base truncate block">{fav.titulo}</Link>
-                                   <p className="text-sm text-green-700 font-bold">R$ {Number(fav.preco).toLocaleString('pt-BR')}</p>
+                                   <p className="text-sm text-green-700 font-bold">R$ {formatMoney(fav.preco)}</p>
                                 </div>
                               </div>
                                <p className="text-xs text-gray-400 mt-1 sm:mt-0 whitespace-nowrap">
@@ -628,7 +648,6 @@ function AdminPanel() {
               </button>
             </div>
             {loading ? <p>Carregando transações...</p> : (
-              // Responsividade: Grid muda para 1 coluna em telas pequenas, 2 em médias, 4 em grandes
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 {KANBAN_COLUMNS.map(column => (
                   <div key={column.id} className="bg-gray-100 rounded-lg shadow-sm">
@@ -663,7 +682,7 @@ function AdminPanel() {
                         <img src={imovel.fotos?.[0] || 'https://placehold.co/100x100'} alt={imovel.titulo} className="w-16 h-16 object-cover rounded-md bg-gray-200 flex-shrink-0"/>
                         <div className="min-w-0">
                           <h3 className="font-bold text-base sm:text-lg truncate">{imovel.titulo}</h3>
-                          <p className="text-gray-600 text-sm sm:text-base">R$ {Number(imovel.preco).toLocaleString('pt-BR')}</p>
+                          <p className="text-gray-600 text-sm sm:text-base">R$ {formatMoney(imovel.preco)}</p>
                         </div>
                       </div>
                       <div className="flex-shrink-0 flex space-x-2 w-full sm:w-auto">
@@ -686,7 +705,19 @@ function AdminPanel() {
               <div><label htmlFor="titulo" className="block text-sm font-medium text-gray-700">Título</label><input type="text" name="titulo" id="titulo" value={imovelData.titulo} onChange={handleChange} required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" /></div>
               <div><label htmlFor="descricao" className="block text-sm font-medium text-gray-700">Descrição</label><textarea name="descricao" id="descricao" value={imovelData.descricao} onChange={handleChange} rows="4" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"></textarea></div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-                <div><label htmlFor="preco" className="block text-sm font-medium text-gray-700">Preço (R$)</label><input type="number" name="preco" id="preco" value={imovelData.preco} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" /></div>
+                <div>
+                  <label htmlFor="preco" className="block text-sm font-medium text-gray-700">Preço (R$)</label>
+                  {/* ALTERAÇÃO: Input tipo 'text' com formatação estilo ATM */}
+                  <input 
+                    type="text" 
+                    name="preco" 
+                    id="preco" 
+                    value={imovelData.preco ? formatMoney(imovelData.preco) : ''} 
+                    onChange={handlePriceChange} 
+                    placeholder="0,00"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" 
+                  />
+                </div>
                 <div><label htmlFor="tipo" className="block text-sm font-medium text-gray-700">Tipo</label><select id="tipo" name="tipo" value={imovelData.tipo} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"><option value="casa">Casa</option><option value="apartamento">Apartamento</option><option value="terreno">Terreno</option></select></div>
                 <div><label htmlFor="finalidade" className="block text-sm font-medium text-gray-700">Finalidade</label><select id="finalidade" name="finalidade" value={imovelData.finalidade} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"><option value="venda">Venda</option><option value="aluguel">Aluguel</option></select></div>
               </div>
@@ -702,7 +733,6 @@ function AdminPanel() {
               </div>
               <div className="space-y-4 pt-6 border-t border-gray-200">
                 <h3 className="text-lg font-medium text-gray-900">Características</h3>
-                {/* Responsividade: Grid muda para 2 colunas em telas pequenas, 5 em maiores */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6">
                   <div><label className="block text-sm font-medium text-gray-700">Quartos</label><input type="number" name="caracteristicas.quartos" value={imovelData.caracteristicas.quartos} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"/></div>
                   <div><label className="block text-sm font-medium text-gray-700">Suítes</label><input type="number" name="caracteristicas.suites" value={imovelData.caracteristicas.suites} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"/></div>
@@ -715,7 +745,6 @@ function AdminPanel() {
                 <h3 className="text-lg font-medium text-gray-900">Mídias</h3>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fotos (até 5)</label>
-                  {/* Responsividade: Grid muda para 3 colunas em telas pequenas, 5 em maiores */}
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-4">
                     {photoPreviews.map((preview, index) => (
                       <div key={index} className="relative aspect-square border-2 border-dashed rounded-lg flex items-center justify-center text-gray-400">
@@ -732,11 +761,6 @@ function AdminPanel() {
                     ))}
                   </div>
                 </div>
-                <div>
-                  <label htmlFor="video" className="block text-sm font-medium text-gray-700">Vídeo</label>
-                  <input id="video" type="file" accept="video/*" onChange={(e) => setVideoFile(e.target.files[0])} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" disabled={isUploading} />
-                  {isEditing && imovelData.videoUrl && !videoFile && (<a href={imovelData.videoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 mt-2 hover:underline block">Ver vídeo atual.</a>)}
-                </div>
               </div>
               <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 pt-6">
                 <button type="submit" disabled={isUploading} className="w-full sm:w-auto flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:bg-gray-400">{isUploading ? 'Salvando...' : (isEditing ? 'Atualizar Imóvel' : 'Cadastrar Imóvel')}</button>
@@ -751,11 +775,34 @@ function AdminPanel() {
           <section className="bg-white p-4 sm:p-8 rounded-lg shadow-md">
             <h2 className="text-2xl sm:text-3xl font-semibold mb-6">Personalização</h2>
             {currentUser && (
-              <div className="mb-6 sm:mb-8 p-4 border border-blue-200 bg-blue-50 rounded-lg">
-                <p className="font-bold text-blue-800 text-sm sm:text-base">Sua Vitrine Pessoal:</p>
-                <Link to={`/corretor/${currentUser.uid}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all text-sm sm:text-base">
-                   {`${window.location.origin}/corretor/${currentUser.uid}`}
-                </Link>
+              <div className="mb-6 sm:mb-8 p-4 border border-blue-200 bg-blue-50 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-blue-800 text-sm sm:text-base mb-1">Sua Vitrine Pessoal:</p>
+                  <Link to={`/corretor/${currentUser.uid}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all text-sm sm:text-base block">
+                     {`${window.location.origin}/corretor/${currentUser.uid}`}
+                  </Link>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                  <button
+                    onClick={handleCopyLink}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-blue-300 text-blue-700 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
+                  >
+                    {linkCopied ? <Check size={18} className="text-green-600"/> : <Copy size={18} />}
+                    <span className={`font-medium ${linkCopied ? 'text-green-600' : ''}`}>
+                      {linkCopied ? 'Copiado!' : 'Copiar'}
+                    </span>
+                  </button>
+                  {/* Botão extra de compartilhar que só aparece se o navegador suportar (ex: celular) */}
+                  {navigator.share && (
+                    <button
+                      onClick={handleShareLink}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                      <Share2 size={18} />
+                      <span className="font-medium">Enviar</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             <form onSubmit={handlePersonalizacaoSubmit} className="space-y-6">
@@ -861,7 +908,6 @@ function AdminPanel() {
         )}
 
         <div className="mb-6 sm:mb-8 border-b border-gray-200">
-          {/* Responsividade: Abas com rolagem horizontal em telas pequenas */}
           <nav className="-mb-px flex space-x-4 sm:space-x-6 overflow-x-auto">
             <button onClick={() => setActiveTab('meusLeads')} className={`flex-shrink-0 whitespace-nowrap py-3 sm:py-4 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm transition-colors duration-200 flex items-center gap-1 sm:gap-2 ${ activeTab === 'meusLeads' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
               <Users size={16}/> Leads
